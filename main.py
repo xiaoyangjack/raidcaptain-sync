@@ -986,6 +986,124 @@ async def ws_parent(ws: WebSocket, token: str = ""):
 # ── 任务下发后的实时通知（HTTP 层内触发）───────────────────────
 
 
+# ── 管理 API（M2.7）───────────────────────────────────────────
+
+@app.get("/api/admin/summary")
+def admin_summary(authorization: Optional[str] = Header(None)):
+    """数据概况：任务/事件/照片/申诉各多少条"""
+    with get_db() as conn:
+        fam = auth_parent(conn, authorization)
+        fid = fam["id"]
+        task_count = conn.execute("SELECT COUNT(*) FROM task WHERE family_id=?", (fid,)).fetchone()[0]
+        event_count = conn.execute("SELECT COUNT(*) FROM event WHERE family_id=?", (fid,)).fetchone()[0]
+        photo_count = conn.execute("SELECT COUNT(*) FROM evidence_file WHERE family_id=? AND appeal_session_id=''", (fid,)).fetchone()[0]
+        appeal_count = conn.execute("SELECT COUNT(*) FROM appeal WHERE family_id=?", (fid,)).fetchone()[0]
+        template_count = conn.execute("SELECT COUNT(*) FROM template WHERE family_id=?", (fid,)).fetchone()[0]
+        # 估算照片总大小
+        size_row = conn.execute(
+            "SELECT SUM(size_bytes) FROM evidence_file WHERE family_id=?", (fid,)).fetchone()[0]
+        photo_size = size_row[0] if size_row and size_row[0] else 0
+        return {
+            "task_count": task_count,
+            "event_count": event_count,
+            "photo_count": photo_count,
+            "appeal_count": appeal_count,
+            "template_count": template_count,
+            "photo_size_mb": round(photo_size / 1024 / 1024, 2) if photo_size else 0,
+        }
+
+
+@app.delete("/api/admin/tasks/{task_id}")
+def admin_delete_task(task_id: str, authorization: Optional[str] = Header(None)):
+    """删除单条任务"""
+    with get_db() as conn:
+        fam = auth_parent(conn, authorization)
+        fid = fam["id"]
+        conn.execute("DELETE FROM task WHERE family_id=? AND task_id=?", (fid, task_id))
+        conn.execute("DELETE FROM template WHERE family_id=? AND template_id=?", (fid, task_id))
+        return {"ok": True, "deleted": task_id}
+
+
+@app.post("/api/admin/clear")
+def admin_clear(body: dict, authorization: Optional[str] = Header(None)):
+    """按类型清空数据。需要传入 {type, confirm_code}。
+    type: 'events' | 'photos' | 'appeals' | 'templates' | 'all' | 'tasks'
+    confirm_code: 必须等于家庭码（防止误触）"""
+    with get_db() as conn:
+        fam = auth_parent(conn, authorization)
+        fid = fam["id"]
+    target = str(body.get("type") or "").strip().lower()
+    confirm_code = str(body.get("confirm_code") or "").strip()
+    if not confirm_code:
+        raise HTTPException(400, "需要输入家庭码确认身份（confirm_code）")
+    if confirm_code != fid:
+        raise HTTPException(403, "家庭码不匹配，无法执行清理")
+    if target not in ("events", "photos", "appeals", "templates", "tasks", "all"):
+        raise HTTPException(400, f"未知类型：{target}，可用值：events/photos/appeals/templates/tasks/all")
+
+    with get_db() as conn:
+        counts = {}
+        if target in ("events", "all"):
+            n = conn.execute("SELECT COUNT(*) FROM event WHERE family_id=?", (fid,)).fetchone()[0]
+            conn.execute("DELETE FROM event WHERE family_id=?", (fid,))
+            counts["events"] = n
+        if target in ("photos", "all"):
+            n = conn.execute("SELECT COUNT(*) FROM evidence_file WHERE family_id=?", (fid,)).fetchone()[0]
+            conn.execute("DELETE FROM evidence_file WHERE family_id=?", (fid,))
+            counts["photos"] = n
+        if target in ("appeals", "all"):
+            n = conn.execute("SELECT COUNT(*) FROM appeal WHERE family_id=?", (fid,)).fetchone()[0]
+            conn.execute("DELETE FROM appeal WHERE family_id=?", (fid,))
+            counts["appeals"] = n
+        if target in ("templates", "all"):
+            n = conn.execute("SELECT COUNT(*) FROM template WHERE family_id=?", (fid,)).fetchone()[0]
+            conn.execute("DELETE FROM template WHERE family_id=?", (fid,))
+            counts["templates"] = n
+        if target == "tasks":
+            n = conn.execute("SELECT COUNT(*) FROM task WHERE family_id=?", (fid,)).fetchone()[0]
+            conn.execute("DELETE FROM task WHERE family_id=?", (fid,))
+            conn.execute("UPDATE task_revision SET rev=rev+1 WHERE family_id=?", (fid,))
+            counts["tasks"] = n
+        if target == "all":
+            conn.execute("DELETE FROM event WHERE family_id=?", (fid,))
+            conn.execute("DELETE FROM evidence_file WHERE family_id=?", (fid,))
+            conn.execute("DELETE FROM appeal WHERE family_id=?", (fid,))
+            conn.execute("DELETE FROM template WHERE family_id=?", (fid,))
+            conn.execute("DELETE FROM task WHERE family_id=?", (fid,))
+            conn.execute("UPDATE task_revision SET rev=rev+1 WHERE family_id=?", (fid,))
+            counts = {"tasks": conn.execute("SELECT COUNT(*) FROM task WHERE family_id=?", (fid,)).fetchone()[0] or 0,
+                      "events": counts.get("events", 0), "photos": counts.get("photos", 0),
+                      "appeals": counts.get("appeals", 0), "templates": counts.get("templates", 0)}
+
+    return {"ok": True, "cleared": counts, "target": target}
+
+
+@app.post("/api/admin/reset")
+def admin_reset(body: dict, authorization: Optional[str] = Header(None)):
+    """彻底重置账号：删除一切数据，保留家庭账号本身。
+    相当于"注销并重新开始"。
+    需要传入 confirm_code（= 家庭码）+ confirm_word（固定填 "RESET"）"""
+    with get_db() as conn:
+        fam = auth_parent(conn, authorization)
+        fid = fam["id"]
+    confirm_code = str(body.get("confirm_code") or "").strip()
+    confirm_word = str(body.get("confirm_word") or "").strip().upper()
+    if confirm_code != fid:
+        raise HTTPException(403, "家庭码不匹配")
+    if confirm_word != "RESET":
+        raise HTTPException(400, '确认词错误，请输入大写 RESET')
+
+    with get_db() as conn:
+        conn.execute("DELETE FROM event WHERE family_id=?", (fid,))
+        conn.execute("DELETE FROM evidence_file WHERE family_id=?", (fid,))
+        conn.execute("DELETE FROM appeal WHERE family_id=?", (fid,))
+        conn.execute("DELETE FROM template WHERE family_id=?", (fid,))
+        conn.execute("DELETE FROM task WHERE family_id=?", (fid,))
+        conn.execute("DELETE FROM device WHERE family_id=?", (fid,))
+        conn.execute("UPDATE task_revision SET rev=1 WHERE family_id=?", (fid,))
+    return {"ok": True, "message": "账号已重置，所有数据已清空"}
+
+
 @app.on_event("startup")
 def _startup():
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
