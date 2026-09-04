@@ -1699,7 +1699,7 @@ function closeLightbox(){
   $("lbImg").src = "";
 }
 
-// ── 战绩统计 ─────────────────────────────────────────────────
+// ── 作战指挥台（战绩统计） ─────────────────────────────────────
 async function loadStats(){
   try {
     const [statesJ, statsJ] = await Promise.all([
@@ -1715,15 +1715,7 @@ async function loadStats(){
     $("statTabPoints").textContent = (s.points > 0 ? '+' : '') + s.points;
     $("statTabRate").textContent = s.completion_rate + '%';
     drawStatsChart(statsJ.days || []);
-    // 加载统一时间线
     loadTimeline();
-      $("evidList").innerHTML = allTodayEvid.slice(0,12).map(e =>
-        `<img style="width:56px;height:56px;border-radius:4px;border:1px solid var(--line);object-fit:cover;cursor:pointer"
-           src="/api/evidence/${e.id}?token=${parentToken}" onclick="openLightbox(${e.id},'${esc(e.title)}','${formatTime(e.at)}')">`
-      ).join("");
-    } else {
-      $("evidList").innerHTML = '<div class="dim" style="font-size:12px">今日暂无打卡凭证</div>';
-    }
   } catch(e) {
     console.warn("loadStats error", e);
   }
