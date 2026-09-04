@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>锐察队长 · 家长指挥台</title>
+<style>
+  :root{
+    --bg:#0c1a0e; --panel:#16301a; --panel2:#1d3a21; --line:#2f5232;
+    --ink:#e9f5d0; --sub:#9dbf7e; --light:#8bac0f; --gold:#f2c14e; --red:#e05b4b;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
+  body{margin:0; background:var(--bg); color:var(--ink);
+       font-family:system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
+       font-size:15px; line-height:1.5}
+  .wrap{max-width:520px; margin:0 auto; padding:14px 14px 90px}
+  h1{font-size:20px; margin:8px 0 2px}
+  .dim{color:var(--sub); font-size:12px}
+  .card{background:var(--panel); border:1px solid var(--line); border-radius:10px;
+        padding:12px; margin-top:10px}
+  .row{display:flex; gap:8px; align-items:center}
+  input,select{background:var(--panel2); border:1px solid var(--line); color:var(--ink);
+        border-radius:8px; padding:9px 10px; font-size:15px; width:100%; outline:none}
+  input:focus{border-color:var(--light)}
+  label{font-size:12px; color:var(--sub); display:block; margin:8px 0 3px}
+  button{background:var(--light); color:#0f380f; border:0; border-radius:8px;
+         padding:10px 14px; font-size:15px; font-weight:700; cursor:pointer}
+  button.ghost{background:var(--panel2); color:var(--sub); border:1px solid var(--line); font-weight:400}
+  button.danger{background:transparent; color:var(--red); border:1px solid var(--red); font-weight:400}
+  button:disabled{opacity:.5}
+  .task{background:var(--panel2); border:1px solid var(--line); border-radius:8px;
+        padding:10px; margin-top:8px}
+  .task .t{font-weight:700}
+  .chip{display:inline-block; font-size:11px; border:1px solid var(--line);
+        border-radius:6px; padding:1px 6px; margin-right:4px; color:var(--sub)}
+  .chip.hi{color:var(--red); border-color:var(--red)}
+  .chip.mand{color:var(--gold); border-color:var(--gold)}
+  .chip.evid{color:#4fc3f7; border-color:#4fc3f7}
+  .dot{display:inline-block; width:9px; height:9px; border-radius:50%; background:#666; margin-right:5px}
+  .dot.on{background:var(--light)}
+  .ev{border-left:3px solid var(--line); padding:4px 8px; margin-top:6px; font-size:13px}
+  .ev.done{border-color:var(--light)} .ev.overdue{border-color:var(--red)}
+  .ev.mission{border-color:var(--gold)}
+  .ev.evid{border-color:#4fc3f7}
+  .grid2{display:grid; grid-template-columns:1fr 1fr; gap:8px}
+  .grid3{display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px}
+  #toast{position:fixed; left:50%; bottom:24px; transform:translateX(-50%);
+         background:var(--panel2); border:1px solid var(--line); color:var(--ink);
+         padding:9px 16px; border-radius:8px; display:none; z-index:9; max-width:90vw}
+  .navbar{position:fixed; bottom:0; left:0; right:0; background:var(--panel);
+          border-top:1px solid var(--line); display:flex}
+  .navbar button{flex:1; background:none; color:var(--sub); border-radius:0; padding:12px 0; font-size:13px; position:relative}
+  .navbar button.on{color:var(--ink); font-weight:700}
+  .badge{position:absolute; top:4px; right:calc(50% - 18px);
+          background:var(--red); color:#fff; border-radius:8px; font-size:10px;
+          padding:1px 5px; min-width:16px; text-align:center; font-weight:700}
+  .days label{display:inline-flex; align-items:center; margin-right:2px; font-size:12px; color:var(--ink)}
+  .days input{width:auto}
+  .tmpl{background:var(--panel2); border:1px solid var(--line); border-radius:8px;
+         padding:10px; margin-top:8px}
+  .tmpl .tname{font-weight:700; color:var(--gold)}
+  .tmpl .tmeta{font-size:12px; color:var(--sub); margin-top:2px}
+  .appeal{border:1px solid var(--line); border-radius:8px; padding:10px; margin-top:8px}
+  .appeal.pending{border-color:var(--gold)}
+  .appeal-row{display:flex; gap:6px; margin-top:4px; flex-wrap:wrap}
+  .tab{display:none}
+  .tab.active{display:block}
+</style>
+</head>
+<body>
+<div id="toast"></div>
+<div class="wrap">
+
+<!-- ════ 未登录 ════ -->
+<div id="authView">
+  <h1>🎖 锐察队长 · 家长指挥台</h1>
+  <div class="dim">任务下发 · 模板管理 · 实时战况 · 申诉审核</div>
+  <div class="card">
+    <div class="grid2">
+      <div><label>家庭码</label><input id="familyCode" placeholder="注册后生成"></div>
+      <div><label>家长密码</label><input id="password" type="password"></div>
+    </div>
+    <div class="row" style="margin-top:12px">
+      <button onclick="login()">登录</button>
+      <button class="ghost" onclick="register()">注册新家庭</button>
+    </div>
+    <div class="dim" style="margin-top:10px">
+      首次使用：点「注册新家庭」→ 记下家庭码 → 在孩子端 App 家长模式·同步页完成设备配对。
+    </div>
+  </div>
+</div>
+
+<!-- ════ 已登录 ════ -->
+<div id="mainView" style="display:none">
+  <div class="row" style="margin-top:8px">
+    <h1 style="flex:1">🎖 任务指挥台</h1>
+    <button class="danger" onclick="logout()">退出</button>
+  </div>
+  <div class="dim">家庭 <b id="famLabel"></b> · 设备 <span id="devStatus"><span class="dot"></span>离线</span></div>
+
+  <!-- ── 任务单 ── -->
+  <div id="taskTab" class="tab active">
+    <div class="card">
+      <b>➕ 新军令</b>
+      <label>标题</label><input id="tTitle" placeholder="例：数学作业">
+      <div class="grid2">
+        <div><label>到点时间</label><input id="tTime" type="time" value="19:00"></div>
+        <div><label>优先级</label>
+          <select id="tPrio">
+            <option value="HIGH">高（强制）</option>
+            <option value="MED">中</option>
+            <option value="LOW">低（打卡）</option>
+          </select>
+        </div>
+      </div>
+      <label>生效日</label>
+      <div class="days" id="tDays"></div>
+      <div class="grid3">
+        <div><label>完成功绩 +</label><input id="tMeritR" type="number" value="10"></div>
+        <div><label>逾期功绩 −</label><input id="tMeritP" type="number" value="20"></div>
+        <div><label>完成纲纪 +</label><input id="tPointsR" type="number" value="5"></div>
+      </div>
+      <div style="margin-top:8px">
+        <label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;cursor:pointer">
+          <input id="tEvidence" type="checkbox" style="width:auto">
+          📷 需拍照打卡（孩子完成时必须拍照取证）
+        </label>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <button onclick="addTask()">加入任务单</button>
+        <button class="ghost" onclick="saveAsTemplate()">💾 存为模板</button>
+        <button class="ghost" onclick="pushTasks()">下发到设备</button>
+      </div>
+    </div>
+    <div class="card"><b>📋 当前任务单</b><span class="dim">（改动需「下发」才生效）</span>
+      <div id="taskList"></div>
+    </div>
+  </div>
+
+  <!-- ── 模板 ── -->
+  <div id="tmplTab" class="tab">
+    <div class="card">
+      <b>📚 任务模板库</b>
+      <div class="dim">保存常用任务，一键下发到设备</div>
+      <div id="tmplList"></div>
+    </div>
+  </div>
+
+  <!-- ── 申诉审核 ── -->
+  <div id="appealTab" class="tab">
+    <div class="card">
+      <b>⚖️ 申诉审核</b>
+      <div class="dim">处理孩子提交的申诉请求</div>
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <button class="ghost" onclick="loadAppeals('PENDING')" style="flex:1">待处理</button>
+        <button class="ghost" onclick="loadAppeals('')" style="flex:1">全部记录</button>
+      </div>
+      <div id="appealList"></div>
+    </div>
+  </div>
+
+  <!-- ── 实时战况 ── -->
+  <div id="feedTab" class="tab">
+    <div class="card"><b>📡 实时战况</b>
+      <div class="dim">完成打卡 / 逾期结算 / 对局成果，实时推送到此页</div>
+      <div id="feed"></div>
+    </div>
+  </div>
+</div>
+</div>
+
+<div class="navbar" id="navbar" style="display:none">
+  <button id="navTask" class="on" onclick="switchTab('task')">任务单</button>
+  <button id="navTmpl" onclick="switchTab('tmpl')">模板</button>
+  <button id="navAppeal" onclick="switchTab('appeal')">申诉<span class="badge" id="appealBadge" style="display:none">0</span></button>
+  <button id="navFeed" onclick="switchTab('feed')">战况</button>
+</div>
+
+<script>
+const API = "";
+let parentToken = localStorage.getItem("rc_parent_token") || "";
+let famCode = localStorage.getItem("rc_fam") || "";
+let draft = [];
+let templates = [];
+let ws = null, hbTimer = null;
+let pendingAppealCount = 0;
+
+const $ = id => document.getElementById(id);
+const toast = m => { const t=$("toast"); t.textContent=m; t.style.display="block";
+  clearTimeout(t._h); t._h=setTimeout(()=>t.style.display="none", 2600); };
+
+const DAYS = ["一","二","三","四","五","六","日"];
+function initDayBoxes(){
+  $("tDays").innerHTML = DAYS.map((d,i)=>
+    `<label><input type="checkbox" value="${i}" ${i<5?"checked":""}>周${d}</label>`).join("");
+}
+initDayBoxes();
+
+function authHeaders(){ return {"Authorization":"Bearer "+parentToken, "Content-Type":"application/json"}; }
+async function api(path, opt={}){
+  try {
+    const r = await fetch(API+path, {...opt, headers:{...authHeaders(), ...(opt.headers||{})}});
+    if(r.status===401){ logout(true); throw new Error("登录已过期"); }
+    const j = await r.json();
+    if(!r.ok) throw new Error(j.detail||("HTTP "+r.status));
+    return j;
+  } catch(e) {
+    // 网络错误（serveo 断线等）不要清 token，静默重试一次
+    if(!parentToken) throw e;
+    console.warn("api error, retry:", path, e.message);
+    const r2 = await fetch(API+path, {...opt, headers:{...authHeaders(), ...(opt.headers||{})}});
+    if(r2.status===401){ logout(true); throw new Error("登录已过期"); }
+    if(!r2.ok){ const j2=await r2.json(); throw new Error(j2.detail||("HTTP "+r2.status)); }
+    return r2.json();
+  }
+}
+
+async function register(){
+  const pw = $("password").value.trim();
+  if(pw.length<6) return toast("密码至少 6 位");
+  const r = await fetch(API+"/api/family/register",{
+    method:"POST", headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({password: pw})});
+  const j = await r.json();
+  if(!r.ok) return toast(j.detail||"注册失败");
+  $("familyCode").value = j.family_code;
+  toast("家庭已创建："+j.family_code+"（已填入，点登录）");
+}
+
+async function login(){
+  famCode = $("familyCode").value.trim();
+  const pw = $("password").value.trim();
+  if(!famCode || !pw) return toast("请填家庭码和密码");
+  try{
+    const j = await fetch(API+"/api/parent/login",{method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({family_code:famCode, password:pw})}).then(r=>r.json());
+    if(!j.parent_token) throw new Error(j.detail||"登录失败");
+    parentToken = j.parent_token;
+    localStorage.setItem("rc_parent_token", parentToken);
+    localStorage.setItem("rc_fam", famCode);
+    enterMain();
+  }catch(e){ toast(e.message); }
+}
+
+function logout(silent){
+  parentToken=""; famCode="";
+  localStorage.removeItem("rc_parent_token"); localStorage.removeItem("rc_fam");
+  if(ws){ws.close(); ws=null;}
+  $("mainView").style.display="none"; $("navbar").style.display="none";
+  $("authView").style.display="block";
+  clearInterval(hbTimer);
+  if(!silent) toast("已退出");
+}
+
+function enterMain(){
+  $("authView").style.display="none";
+  $("mainView").style.display="block";
+  $("navbar").style.display="flex";
+  $("famLabel").textContent = famCode;
+  loadTasks(); loadTemplates(); refreshStatus();
+  connectWS();
+  clearInterval(hbTimer); hbTimer = setInterval(() => { refreshStatus(); loadAppeals('PENDING'); }, 15000);
+}
+
+function switchTab(t){
+  document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
+  $('taskTab').classList.toggle('active', t==='task');
+  $('tmplTab').classList.toggle('active', t==='tmpl');
+  $('appealTab').classList.toggle('active', t==='appeal');
+  $('feedTab').classList.toggle('active', t==='feed');
+  $('navTask').className = t==='task'?'on':'';
+  $('navTmpl').className = t==='tmpl'?'on':'';
+  $('navAppeal').className = t==='appeal'?'on':'';
+  $('navFeed').className = t==='feed'?'on':'';
+  if(t==='tmpl') loadTemplates();
+  if(t==='appeal') loadAppeals('PENDING');
+}
+
+/* ── 任务单 ── */
+function readTaskForm(){
+  const days = [...$("tDays").querySelectorAll("input:checked")].map(i=>+i.value);
+  let mask = 0; days.forEach(d=>mask |= 1<<d);
+  if(!mask) mask = 127;
+  return {
+    task_id: (crypto.randomUUID ? crypto.randomUUID() :
+      Date.now().toString(36) + Math.random().toString(36).slice(2, 10)),
+    title: $("tTitle").value.trim(),
+    due_time: $("tTime").value || "19:00",
+    days_mask: mask,
+    priority: $("tPrio").value,
+    mandatory: $("tPrio").value==="HIGH",
+    merit_reward: +$("tMeritR").value||0,
+    merit_penalty: +$("tMeritP").value||0,
+    points_reward: +$("tPointsR").value||0,
+    points_penalty: $("tPrio").value==="HIGH" ? 10 : 0,
+    require_evidence: !!$("tEvidence").checked,
+    active: true
+  };
+}
+function fillForm(t){
+  $("tTitle").value = t.title || "";
+  $("tTime").value = t.due_time || "19:00";
+  $("tPrio").value = t.priority || "MED";
+  $("tMeritR").value = t.merit_reward || 0;
+  $("tMeritP").value = t.merit_penalty || 0;
+  $("tPointsR").value = t.points_reward || 0;
+  $("tEvidence").checked = !!t.require_evidence;
+  // days mask
+  const mask = t.days_mask || 127;
+  $("tDays").querySelectorAll("input").forEach((cb, i) => {
+    cb.checked = (mask >> i) & 1;
+  });
+}
+function addTask(){
+  const t = readTaskForm();
+  if(!t.title) return toast("标题不能为空");
+  draft.push(t); renderDraft();
+  $("tTitle").value=""; toast("已加入待下发（共 "+draft.length+" 条）");
+}
+function delDraft(i){ draft.splice(i,1); renderDraft(); }
+function prioName(p){ return {HIGH:"高",MED:"中",LOW:"低"}[p]||p; }
+function maskName(m){
+  if(m===127) return "每天";
+  return DAYS.filter((_,i)=>(m>>i)&1).map(d=>"周"+d).join(" ");
+}
+function renderDraft(){
+  $("taskList").innerHTML = draft.map((t,i)=>`
+    <div class="task"><span class="t">${esc(t.title)}</span>
+      <span class="chip">${t.due_time}</span>
+      <span class="chip ${t.priority==="HIGH"?"hi":""}">${prioName(t.priority)}优先级</span>
+      <span class="chip">${maskName(t.days_mask)}</span>
+      ${t.mandatory?'<span class="chip mand">强制</span>':""}
+      ${t.require_evidence?'<span class="chip evid">📷需拍照</span>':""}
+      <span class="chip">功绩 +${t.merit_reward}/${t.merit_penalty?"逾期-"+t.merit_penalty:""}</span>
+      <button class="ghost" style="padding:2px 10px;margin-top:6px" onclick="delDraft(${i})">移除</button>
+    </div>`).join("") || '<div class="dim" style="margin-top:8px">暂无任务，先在上方添加</div>';
+}
+async function pushTasks(){
+  if(!draft.length) return toast("任务单为空");
+  try{
+    const j = await api("/api/parent/tasks", {method:"POST", body: JSON.stringify({tasks: draft})});
+    toast("已下发 revision "+j.revision);
+    draft = []; renderDraft(); loadTasks(); refreshStatus();
+  }catch(e){ toast(e.message); }
+}
+async function loadTasks(){
+  try{
+    const j = await api("/api/parent/tasks");
+    draft = j.tasks.filter(t=>t.active);
+    renderDraft();
+  }catch(e){ toast(e.message); }
+}
+
+/* ── 模板管理 ── */
+async function loadTemplates(){
+  try{
+    const j = await api("/api/templates");
+    templates = j.templates || [];
+    renderTemplates();
+  }catch(e){ toast(e.message); }
+}
+
+async function saveAsTemplate(){
+  const t = readTaskForm();
+  if(!t.title) return toast("任务标题不能为空");
+  const name = prompt("给模板起个名字（如：数学日常 / 练琴模板）：");
+  if(!name || !name.trim()) return;
+  try{
+    await api("/api/templates", {
+      method:"POST",
+      body: JSON.stringify({
+        template_id: "",
+        name: name.trim(),
+        title: t.title,
+        due_time: t.due_time,
+        days_mask: t.days_mask,
+        priority: t.priority,
+        mandatory: t.mandatory,
+        merit_reward: t.merit_reward,
+        merit_penalty: t.merit_penalty,
+        points_reward: t.points_reward,
+        points_penalty: t.points_penalty,
+        require_evidence: t.require_evidence,
+      })
+    });
+    toast("模板已保存");
+    loadTemplates();
+  }catch(e){ toast(e.message); }
+}
+
+async function dispatchTemplate(templateId){
+  try{
+    const j = await api(`/api/templates/${templateId}/dispatch`, {method:"POST"});
+    toast("已下发到设备！revision "+j.revision);
+    loadTasks(); refreshStatus();
+  }catch(e){ toast(e.message); }
+}
+
+async function deleteTemplate(templateId){
+  if(!confirm("确定删除该模板？")) return;
+  try{
+    await api(`/api/templates/${templateId}`, {method:"DELETE"});
+    toast("已删除");
+    loadTemplates();
+  }catch(e){ toast(e.message); }
+}
+
+function renderTemplates(){
+  if(!templates.length){
+    $("tmplList").innerHTML = '<div class="dim" style="margin-top:8px">暂无模板。<br>在任务单填写任务后，点「💾 存为模板」保存。</div>';
+    return;
+  }
+  $("tmplList").innerHTML = templates.map(t => `
+    <div class="tmpl">
+      <div class="tname">${esc(t.name)}</div>
+      <div class="tmeta">「${esc(t.title)}」 ${t.due_time} · ${maskName(t.days_mask)} · ${prioName(t.priority)}优先级
+        ${t.require_evidence?'<span class="chip evid">📷需拍照</span>':''}
+        ${t.mandatory?'<span class="chip mand">强制</span>':''}
+      </div>
+      <div class="tmpl-row" style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">
+        <button onclick="fillForm(${JSON.stringify(t).replace(/"/g,'&quot;')})" style="padding:5px 10px;font-size:13px">📝 编辑</button>
+        <button onclick="dispatchTemplate('${t.template_id}')" style="padding:5px 10px;font-size:13px">🚀 下发</button>
+        <button class="ghost" onclick="deleteTemplate('${t.template_id}')" style="padding:5px 10px;font-size:13px">🗑</button>
+      </div>
+    </div>`).join("");
+}
+
+/* ── 申诉审核 ── */
+async function loadAppeals(status){
+  try{
+    const j = await api("/api/appeals" + (status ? "?status="+status : ""));
+    renderAppeals(j.appeals || []);
+    if(!status || status==="PENDING"){
+      pendingAppealCount = (j.appeals || []).filter(a => a.result==="PENDING").length;
+      updateAppealBadge();
+    }
+  }catch(e){ toast(e.message); }
+}
+
+function updateAppealBadge(){
+  const badge = $("appealBadge");
+  if(pendingAppealCount > 0){
+    badge.textContent = pendingAppealCount;
+    badge.style.display = "inline-block";
+  } else {
+    badge.style.display = "none";
+  }
+}
+
+async function reviewAppeal(sessionId, result){
+  if(!confirm(result==="APPROVED" ? "确认通过该申诉？" : "确认驳回该申诉？")) return;
+  try{
+    await api(`/api/appeals/${sessionId}/review`, {
+      method:"POST",
+      body: JSON.stringify({result})
+    });
+    toast(result==="APPROVED" ? "已通过申诉" : "已驳回申诉");
+    loadAppeals('PENDING');
+    refreshStatus();
+  }catch(e){ toast(e.message); }
+}
+
+function resultLabel(r){
+  return {PENDING:"⏳ 待处理", APPROVED:"✅ 已通过", REJECTED:"❌ 已驳回"}[r]||r;
+}
+function resultClass(r){
+  return {PENDING:"pending", APPROVED:"approved", REJECTED:"rejected"}[r]||"";
+}
+
+function renderAppeals(appeals){
+  if(!appeals.length){
+    $("appealList").innerHTML = '<div class="dim" style="margin-top:8px">暂无申诉记录</div>';
+    return;
+  }
+  $("appealList").innerHTML = appeals.map(a => `
+    <div class="appeal ${resultClass(a.result)}">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:4px">
+        <b>第 ${a.session_id} 局</b>
+        <span class="chip ${a.result==='PENDING'?'mand':''}">${resultLabel(a.result)}</span>
+      </div>
+      <div class="dim" style="font-size:12px;margin-top:2px">
+        ${a.device_name} · ${a.submitted_at ? new Date(a.submitted_at).toLocaleString() : ""}
+        ${a.reviewed_at ? ' · 审核时间：'+new Date(a.reviewed_at).toLocaleString() : ""}
+      </div>
+      ${a.reason ? `<div style="margin-top:4px;font-size:13px">申诉理由：${esc(a.reason)}</div>` : ""}
+      ${a.has_evidence ? `<div style="margin-top:6px">
+        <button onclick="showAppealEvidence('${a.session_id}', ${JSON.stringify(a.evidence_ids||[]).replace(/"/g,'&quot;')})"
+          style="padding:4px 10px;font-size:12px;border-radius:4px;cursor:pointer">
+          📷 查看凭证(${a.evidence_ids ? a.evidence_ids.length : 0}张)
+        </button>
+      </div>` : ""}
+      ${a.result === "PENDING" ? `
+        <div class="appeal-row" style="margin-top:8px">
+          <button onclick="reviewAppeal('${a.session_id}','APPROVED')" style="flex:1;padding:7px;font-size:13px">✅ 通过</button>
+          <button class="danger" onclick="reviewAppeal('${a.session_id}','REJECTED')" style="flex:1;padding:7px;font-size:13px">❌ 驳回</button>
+        </div>` : ""}
+    </div>`).join("");
+}
+
+async function showAppealEvidence(sessionId, evIds){
+  if(!evIds || !evIds.length){ toast("无凭证"); return; }
+  const overlay = document.createElement("div");
+  overlay.id = "evOverlay";
+  overlay.style = "position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:9999;display:flex;align-items:center;justify-content:center;flex-direction:column";
+  overlay.onclick = e=>{ if(e.target===overlay) overlay.remove(); };
+  const title = document.createElement("div");
+  title.textContent = `第 ${sessionId} 局 · 申诉凭证`;
+  title.style = "color:#fff;margin-bottom:12px;font-size:15px;font-weight:bold";
+  overlay.appendChild(title);
+  const container = document.createElement("div");
+  container.style = "display:flex;gap:12px;flex-wrap:wrap;justify-content:center;max-width:90vw;max-height:70vh;overflow-y:auto";
+  overlay.appendChild(container);
+  document.body.appendChild(overlay);
+  // 逐张加载
+  let ok = 0;
+  for(const id of evIds){
+    try{
+      const r = await api(`/api/evidence/${id}`);
+      const img = document.createElement("img");
+      img.src = `data:${r.mime};base64,${r.data_b64}`;
+      img.style = "max-width:320px;max-height:320px;border-radius:6px;border:2px solid #555;cursor:pointer";
+      img.onclick = ()=>img.style.maxWidth === "320px" ? img.style.maxWidth="100%" : (img.style.maxWidth="320px", img.style.maxHeight="320px");
+      container.appendChild(img);
+      ok++;
+    }catch(_){}
+  }
+  if(!ok){ toast("加载凭证失败"); overlay.remove(); }
+  // 关闭按钮
+  const closeBtn = document.createElement("button");
+  closeBtn.textContent = "关闭";
+  closeBtn.style = "margin-top:12px;padding:6px 20px;background:#444;color:#fff;border-radius:4px;cursor:pointer";
+  closeBtn.onclick = ()=>overlay.remove();
+  overlay.appendChild(closeBtn);
+}
+
+/* ── 实时战况 ── */
+function addFeed(cls, html){
+  const d = document.createElement("div");
+  d.className = "ev "+cls; d.innerHTML = html;
+  $("feed").prepend(d);
+  while($("feed").children.length>60) $("feed").lastChild.remove();
+}
+function connectWS(){
+  if(ws) ws.close();
+  const proto = location.protocol==="https:"?"wss":"ws";
+  ws = new WebSocket(`${proto}://${location.host}/ws/parent?token=${encodeURIComponent(parentToken)}`);
+  ws.onmessage = e=>{
+    try{
+      const m = JSON.parse(e.data);
+      if(m.type==="device_status"){ renderDevStatus(m); }
+      else if(m.type==="event"){ renderEvent(m.event); }
+      else if(m.type==="events_backlog"){ (m.events||[]).slice().reverse().forEach(renderEvent); }
+    }catch(_){}
+  };
+  ws.onclose = ()=>{ setTimeout(()=>{ if(parentToken) connectWS(); }, 5000); };
+}
+function renderEvent(ev){
+  const t = ev.created_at ? new Date(ev.created_at).toLocaleTimeString() : "";
+  if(ev.kind==="task_completion"){
+    const ok = ev.data.state==="DONE";
+    addFeed(ok?"done":"overdue",
+      `[${t}] 军令「${esc(ev.data.title || ev.data.task_id)}」 ${ok?"✅ 已完成打卡":"❌ 逾期未完成"}`);
+  } else if(ev.kind==="mission_result"){
+    const d = ev.data;
+    const pd = d.pointsDelta ?? d.points_delta ?? 0;
+    const md = d.meritDelta ?? d.merit_delta ?? 0;
+    const vm = d.validMinutes ?? d.valid_minutes ?? 0;
+    const oc = {COMPLETED:"幸存通关", EXECUTED:"军法处置", ABORTED:"中断", APPEAL_PENDING:"申诉中"}[d.outcome]||d.outcome;
+    addFeed("mission",
+      `[${t}] 对局「${esc(d.task)}」 ${oc} · 纲纪 ${pd>=0?"+":""}${pd} · 功绩 ${md>=0?"+":""}${md} · 有效 ${vm} 分钟`);
+  } else if(ev.kind==="appeal_submitted"){
+    addFeed("evid",
+      `[${t}] 📋 孩子提交了申诉「第 ${esc(ev.data.session_id || ev.data.sessionId || '?')} 局」`);
+    pendingAppealCount++;
+    updateAppealBadge();
+  }
+}
+async function refreshStatus(){
+  if(!parentToken) return;
+  try{
+    const j = await api("/api/status");
+    renderDevStatus(j);
+    if(j.pending_appeals !== undefined && j.pending_appeals !== pendingAppealCount){
+      pendingAppealCount = j.pending_appeals;
+      updateAppealBadge();
+    }
+  }catch(_){}
+}
+function renderDevStatus(s){
+  let online, name, seen;
+  if (s.devices) {
+    online = s.devices[0]?.online || false;
+    name = s.devices[0]?.name || "未配对设备";
+    seen = s.devices[0]?.last_seen_text || "";
+  } else {
+    online = !!s.online;
+    name = s.name || "未配对设备";
+    seen = s.seen_text || "";
+  }
+  $("devStatus").innerHTML = `<span class="dot ${online?"on":""}"></span>${esc(name)} · ${online?"在线":"离线 "+seen}`;
+}
+
+function esc(s){ return String(s??"").replace(/[&<>"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+
+if(parentToken && famCode){ $("familyCode").value=famCode; enterMain(); }
+</script>
+</body>
+</html>
