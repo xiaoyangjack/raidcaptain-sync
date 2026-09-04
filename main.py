@@ -14,6 +14,7 @@
 
 零第三方推送依赖、数据全部自持。启动：uvicorn main:app --host 0.0.0.0 --port 8000
 """
+import base64
 import hashlib
 import hmac
 import json
@@ -26,6 +27,7 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 from fastapi import FastAPI, Header, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -704,26 +706,24 @@ def list_evidence(task_id: str = "", appeal_session_id: str = "", limit: int = 5
 
 
 @app.get("/api/evidence/{ev_id}")
-def get_evidence(ev_id: int, authorization: Optional[str] = Header(None)):
-    """取回一张取证照片（base64 格式 + mime）。"""
+def get_evidence(ev_id: int, authorization: Optional[str] = Header(None), token: Optional[str] = None):
+    """取回一张取证照片（直接返回二进制图片，供 <img src> 使用）。
+    支持 Authorization: Bearer xxx 或 ?token=xxx（用于 <img> 标签直接引用）。"""
+    # <img src> 无法带自定义 header，降级用 query 参数传 token
+    auth = authorization
+    if not auth and token:
+        auth = f"Bearer {token}"
     with get_db() as conn:
-        fam = auth_parent(conn, authorization)
+        fam = auth_parent(conn, auth)
         row = conn.execute(
             "SELECT * FROM evidence_file WHERE _id=? AND family_id=?",
             (ev_id, fam["id"]),
         ).fetchone()
         if not row:
             raise HTTPException(404, "证据不存在")
-        return {
-            "id": row["_id"],
-            "task_id": row["task_id"],
-            "task_title": row["task_title"],
-            "device_name": row["device_name"],
-            "mime": row["mime"],
-            "size_bytes": row["size_bytes"],
-            "created_at": row["created_at"],
-            "data_b64": row["data_b64"],
-        }
+        mime = row["mime"] or "image/jpeg"
+        data = base64.b64decode(row["data_b64"])
+        return Response(content=data, media_type=mime)
 
 
 # ── 申诉审核 API（M2.6）─────────────────────────────────────────

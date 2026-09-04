@@ -998,7 +998,7 @@ function renderToday(){
     const thumbsHtml = evList.length ? `
       <div class="task-thumbs">
         ${evList.slice(0,4).map(e => `<img class="task-thumb" loading="lazy"
-            src="/api/evidence/${e.id}"
+            src="/api/evidence/${e.id}?token=${parentToken}"
             onclick="openLightbox(${e.id},'${esc(t.title)}','${formatTime(e.at)}',event)"
             alt="${esc(t.title)}">`).join("")}
         ${evList.length>4?`<div style="display:flex;align-items:center;justify-content:center;width:48px;height:48px;border-radius:4px;border:1px solid var(--line);background:var(--panel2);color:var(--sub);font-size:11px">+${evList.length-4}</div>`:''}
@@ -1514,9 +1514,9 @@ function renderFeed(){
 }
 
 // ── 大图查看器 ────────────────────────────────────────────────
-function openLightbox(evId, title, time, event){
-  event.stopPropagation();
-  $("lbImg").src = `/api/evidence/${evId}`;
+function openLightbox(evId, title, time){
+  // 关闭由外层 div onclick="closeLightbox()" 处理，无需 event.stopPropagation()
+  $("lbImg").src = `/api/evidence/${evId}?token=${parentToken}`;
   $("lbMeta").textContent = `${esc(title)} · ${time}`;
   $("lightbox").classList.add("active");
 }
@@ -1548,7 +1548,7 @@ async function loadStats(){
     if(allTodayEvid.length){
       $("evidList").innerHTML = allTodayEvid.slice(0,12).map(e =>
         `<img style="width:56px;height:56px;border-radius:4px;border:1px solid var(--line);object-fit:cover;cursor:pointer"
-           src="/api/evidence/${e.id}" onclick="openLightbox(${e.id},'${esc(e.title)}','${formatTime(e.at)}',event)">`
+           src="/api/evidence/${e.id}?token=${parentToken}" onclick="openLightbox(${e.id},'${esc(e.title)}','${formatTime(e.at)}')">`
       ).join("");
     } else {
       $("evidList").innerHTML = '<div class="dim" style="font-size:12px">今日暂无打卡凭证</div>';
