@@ -204,6 +204,11 @@
             border:1px solid var(--line); font-size:13px; line-height:1;
             display:flex; align-items:center; justify-content:center; cursor:pointer}
   .task-del:hover{color:var(--red); border-color:var(--red)}
+  .task-edit{position:absolute; top:6px; right:32px; width:22px; height:22px;
+             border-radius:50%; background:var(--panel); color:var(--sub);
+             border:1px solid var(--line); font-size:11px; line-height:1;
+             display:flex; align-items:center; justify-content:center; cursor:pointer; padding:0}
+  .task-edit:hover{color:var(--gold); border-color:var(--gold); background:rgba(242,193,78,.1)}
 
   /* 任务状态徽章（大圆图标） */
   .task-status-badge{position:absolute; top:6px; right:36px;
@@ -565,7 +570,7 @@
     <div class="modal-actions">
       <button class="ghost" onclick="closeTaskModal()">取消</button>
       <button class="ghost" onclick="saveAsTemplateFromModal()">💾 存模板</button>
-      <button class="primary" onclick="dispatchFromModal()">🚀 下发</button>
+      <button class="primary" id="taskSubmitBtn" onclick="dispatchFromModal()">🚀 下发</button>
     </div>
   </div>
 </div>
@@ -611,7 +616,7 @@
     </label>
     <div class="modal-actions">
       <button class="ghost" onclick="closeTmplModal()">取消</button>
-      <button class="primary" onclick="saveTemplate()">保存模板</button>
+      <button class="primary" id="tmplSubmitBtn" onclick="saveTemplate()">保存模板</button>
     </div>
   </div>
 </div>
@@ -1016,6 +1021,7 @@ function renderToday(){
         </div>
         ${badgeHtml}
         ${extraBadge}
+        <button class="task-edit" onclick="openEditTaskModal('${esc(t.task_id)}')" title="编辑">✏️</button>
         <button class="task-del" onclick="deleteActiveTask('${esc(t.task_id)}')" title="删除">×</button>
       </div>`;
   }).join("");
@@ -1048,18 +1054,37 @@ async function deleteActiveTask(taskId){
 // ============================================================
 // 弹窗：新增/编辑军令
 // ============================================================
+let editingTaskId = null;   // 非空 = 编辑模式
+
 function openTaskModal(){
+  editingTaskId = null;
   clearTaskForm("t");
   clearError();
   $("taskModalTitle").textContent = "➕ 新增军令";
+  document.getElementById("taskSubmitBtn").textContent = "🚀 下发";
   $("taskModal").classList.add("active");
   setTimeout(() => $("tTitle").focus(), 300);
 }
+
+/** 打开编辑模式：把已有任务填进表单，submit 变成「更新」 */
+function openEditTaskModal(taskId){
+  const t = activeTasks.find(x => x.task_id === taskId);
+  if(!t) return toast("找不到该军令", "error");
+  editingTaskId = taskId;
+  setTaskForm("t", t);
+  clearError();
+  $("taskModalTitle").textContent = "✏️ 编辑军令";
+  document.getElementById("taskSubmitBtn").textContent = "✏️ 更新下发";
+  $("taskModal").classList.add("active");
+  setTimeout(() => $("tTitle").focus(), 300);
+}
+
 function closeTaskModal(){
   if(isDispatching) return;   // 下发中禁止关闭
   $("taskModal").classList.remove("active");
   setModalLoading(false);
   clearError();
+  editingTaskId = null;
 }
 $("taskModal").addEventListener("click", e => {
   if(e.target === $("taskModal")) closeTaskModal();
@@ -1074,7 +1099,23 @@ function dispatchFromModal(){
 
   clearError();
 
-  // 合并后的统计（让用户在确认前就清楚）
+  // 编辑模式：保留原 task_id，替换原任务
+  if(editingTaskId){
+    t.task_id = editingTaskId;
+    const merged = activeTasks.map(x => x.task_id === editingTaskId ? t : x);
+    const weekday = weekdayNow();
+    const isToday = ((t.days_mask||0) >> weekday) & 1;
+    const evidenceNote = t.require_evidence ? "📷 需拍照打卡\n" : "";
+    const dayNote = isToday ? "✅ 今日即生效" : "⚠️ 今日不生效（" + maskName(t.days_mask) + "）";
+    showConfirm(
+      "确认更新军令？",
+      `「${t.title}」 ${t.due_time}\n${evidenceNote}${dayNote}\n\n将替换原任务，task_id 保持不变（孩子端识别用）。\n更新后孩子端会立即收到最新内容。`,
+      () => doDispatch(merged)
+    );
+    return;
+  }
+
+  // 新增模式：追加
   const merged = [...activeTasks, t];
   const weekday = weekdayNow();
   const todaysCount = merged.filter(x => ((x.days_mask||0) >> weekday) & 1).length;
@@ -1087,36 +1128,36 @@ function dispatchFromModal(){
   showConfirm(
     "确认下发军令？",
     `「${t.title}」 ${t.due_time}\n${evidenceNote}${dayNote}\n\n下发起将共有 ${merged.length} 条军令，其中 ${todaysCount} 条今日生效。`,
-    () => doDispatch(t)
+    () => doDispatch(merged)
   );
 }
 
 /** 实际执行下发（含 loading + 错误处理） */
-async function doDispatch(t){
+async function doDispatch(taskList){
   if(isDispatching) return;
   isDispatching = true;
   setModalLoading(true);
   clearError();
 
   try {
-    const merged = [...activeTasks, t];
     const j = await api("/api/parent/tasks", {
       method:"POST",
-      body: JSON.stringify({tasks: merged})
+      body: JSON.stringify({tasks: taskList})
     });
     lastSyncRev = j.revision;
 
     // 成功：关弹窗 + toast + 刷新
     closeTaskModal();
     setModalLoading(false);
-    toast(`✅ 已下发（revision ${j.revision}）`, "success");
+    toast(editingTaskId ? "✅ 军令已更新" : `✅ 已下发（revision ${j.revision}）`, "success");
     await loadTasks();
     refreshStatus();
 
-    // 高亮新任务
-    if(t.task_id){
+    // 高亮被更新的任务
+    const targetId = editingTaskId || (taskList[taskList.length-1] || {}).task_id;
+    if(targetId){
       setTimeout(() => {
-        const el = document.querySelector(`[data-tid="${t.task_id}"]`);
+        const el = document.querySelector(`[data-tid="${targetId}"]`);
         if(el) el.classList.add("task-new");
         setTimeout(() => el && el.classList.remove("task-new"), 2100);
       }, 150);
@@ -1125,7 +1166,7 @@ async function doDispatch(t){
     // 失败：弹窗保留 + 错误条
     const r = detectError(e);
     formError(r.msg, r.retry);
-    lastFailedTask = t;
+    lastFailedTask = taskList[taskList.length-1];
     setModalLoading(false);
   } finally {
     isDispatching = false;
@@ -1200,7 +1241,10 @@ async function loadTemplates(){
   }catch(e){ toast(e.message); }
 }
 
+let editingTmplId = null;
+
 function openTmplModal(){
+  editingTmplId = null;
   $("tmplModalTitle").textContent = "📚 新建模板";
   $("tmplName").value = "";
   $("tmplTitle").value = "";
@@ -1210,9 +1254,32 @@ function openTmplModal(){
   $("tmplMeritP").value = 20;
   $("tmplEvidence").checked = false;
   $("tmplDays").querySelectorAll("input").forEach((cb, i) => cb.checked = i<5);
+  $("tmplSubmitBtn").textContent = "💾 保存模板";
   $("tmplModal").classList.add("active");
 }
-function closeTmplModal(){ $("tmplModal").classList.remove("active"); }
+
+function openEditTmplModal(tmplId){
+  const t = templates.find(x => x.template_id === tmplId);
+  if(!t) return toast("找不到该模板", "error");
+  editingTmplId = tmplId;
+  $("tmplModalTitle").textContent = "✏️ 编辑模板";
+  $("tmplName").value = t.name;
+  $("tmplTitle").value = t.title;
+  $("tmplTime").value = t.due_time || "19:00";
+  $("tmplPrio").value = t.priority || "MED";
+  $("tmplMeritR").value = t.merit_reward || 10;
+  $("tmplMeritP").value = t.merit_penalty || 20;
+  $("tmplEvidence").checked = !!t.require_evidence;
+  const mask = t.days_mask || 127;
+  $("tmplDays").querySelectorAll("input").forEach((cb, i) => cb.checked = !!(mask & (1<<i)));
+  $("tmplSubmitBtn").textContent = "✏️ 更新模板";
+  $("tmplModal").classList.add("active");
+}
+
+function closeTmplModal(){
+  $("tmplModal").classList.remove("active");
+  editingTmplId = null;
+}
 $("tmplModal").addEventListener("click", e => {
   if(e.target === $("tmplModal")) closeTmplModal();
 });
@@ -1227,7 +1294,7 @@ async function saveTemplate(){
     await api("/api/templates", {
       method:"POST",
       body: JSON.stringify({
-        template_id: "",
+        template_id: editingTmplId || "",
         name: name,
         title: $("tmplTitle").value.trim() || name,
         due_time: $("tmplTime").value || "19:00",
@@ -1241,7 +1308,7 @@ async function saveTemplate(){
         require_evidence: $("tmplEvidence").checked
       })
     });
-    toast("✅ 模板已保存");
+    toast(editingTmplId ? "✅ 模板已更新" : "✅ 模板已保存", "success");
     closeTmplModal();
     await loadTemplates();
   }catch(e){ toast(e.message); }
@@ -1262,7 +1329,8 @@ function renderTemplates(){
         · 功绩+${t.merit_reward}${t.merit_penalty?"/逾期-"+t.merit_penalty:""}
       </div>
       <div class="row">
-        <button onclick="useTemplate('${t.template_id}')">🚀 立即下发</button>
+        <button onclick="useTemplate('${t.template_id}')">🚀 下发</button>
+        <button class="ghost" onclick="openEditTmplModal('${t.template_id}')">✏️ 编辑</button>
         <button class="ghost" onclick="deleteTemplate('${t.template_id}')">🗑 删除</button>
       </div>
     </div>`).join("");
