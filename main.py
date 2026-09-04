@@ -396,6 +396,64 @@ def _seen_text(ts: int) -> str:
     return f"{diff // 86400} 天前"
 
 
+@app.get("/api/parent/history")
+def history_events(
+    since_days: int = 7,
+    kind: str = "",
+    authorization: Optional[str] = Header(None)
+):
+    """返回历史事件（按日期分组，含已解析 payload），供「作战指挥台」追溯。"""
+    with get_db() as conn:
+        fam = auth_parent(conn, authorization)
+        since_ts = int(time.time()) - since_days * 86400
+        sql = "SELECT * FROM event WHERE family_id=? AND created_at>=?"
+        args = [fam["id"], since_ts]
+        if kind:
+            sql += " AND kind=?"
+            args.append(kind)
+        sql += " ORDER BY created_at DESC LIMIT 500"
+        rows = conn.execute(sql, args).fetchall()
+
+        from collections import defaultdict
+        by_day = defaultdict(list)
+        for r in rows:
+            p = {}
+            try: p = json.loads(r["payload"] or "{}")
+            except: pass
+            ev = {
+                "id": r["_id"],
+                "kind": r["kind"],
+                "created_at": r["created_at"],
+                "device_name": r.get("device_name",""),
+                "task_id": p.get("task_id",""),
+                "title": p.get("title",""),
+                "state": p.get("state",""),
+                "merit_delta": p.get("merit_delta",0),
+                "points_delta": p.get("points_delta",0),
+                "evidence": p.get("evidence",False),
+                "score": p.get("score"),
+                "result": p.get("result"),
+                "appeal_status": p.get("status",""),
+            }
+            day = time.strftime("%Y-%m-%d", time.localtime(r["created_at"]))
+            by_day[day].append(ev)
+
+        summaries = {}
+        for day, evs in by_day.items():
+            done = sum(1 for e in evs if e["kind"]=="task_completion" and e["state"]=="DONE")
+            overdue = sum(1 for e in evs if e["kind"]=="task_completion" and e["state"]=="OVERDUE")
+            merit = sum(e["merit_delta"] for e in evs)
+            points = sum(e["points_delta"] for e in evs)
+            summaries[day] = {"done":done,"overdue":overdue,"merit":merit,"points":points,"total":len(evs)}
+
+        return {
+            "days": list(reversed(sorted(by_day.keys()))),
+            "by_day": {k: by_day[k] for k in sorted(by_day)},
+            "summaries": summaries,
+            "total": len(rows),
+        }
+
+
 @app.get("/api/status")
 def status(authorization: Optional[str] = Header(None)):
     with get_db() as conn:

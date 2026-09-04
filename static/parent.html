@@ -158,7 +158,44 @@
          padding:10px 16px; border-radius:8px; display:none; z-index:9; max-width:90vw;
          font-size:13px}
 
-  /* 战况事件 */
+  /* 统一时间线（作战指挥台） */
+  .tl-day{margin-top:10px}
+  .tl-day-header{display:flex; justify-content:space-between; align-items:center;
+                 padding:7px 10px; background:var(--panel2); border-radius:6px;
+                 cursor:pointer; user-select:none; font-size:12px; border:1px solid var(--line)}
+  .tl-day-header.collapsed{border-radius:6px}
+  .tl-day-header:hover{background:var(--line)}
+  .tl-day-label{font-weight:700; color:var(--ink)}
+  .tl-day-summary{display:flex; gap:8px; align-items:center; font-size:11px}
+  .tl-day-summary span{padding:1px 5px; border-radius:3px; background:rgba(0,0,0,.15)}
+  .tl-arrow{color:var(--sub); font-size:9px; margin-left:2px}
+  .tl-day-events{margin-top:4px; padding-left:8px; border-left:1px dashed var(--line)}
+  .tl-day-events.hidden{display:none}
+  .tl-ev{display:flex; gap:8px; padding:8px 10px; margin-top:4px;
+        background:var(--panel2); border-radius:0 6px 6px 0;
+        border-left:3px solid var(--sub); font-size:13px; transition:background .2s}
+  .tl-ev:hover{background:var(--line)}
+  .tl-ev-icon{font-size:18px; flex-shrink:0; line-height:1.1}
+  .tl-ev-body{flex:1; min-width:0}
+  .tl-ev-title{display:flex; justify-content:space-between; align-items:center; gap:8px;
+               font-weight:600; color:var(--ink)}
+  .tl-ev-time{color:var(--sub); font-size:11px; font-weight:400; white-space:nowrap}
+  .tl-ev-meta{margin-top:2px; font-size:12px; color:var(--sub);
+              display:flex; align-items:center; gap:6px; flex-wrap:wrap}
+  .tl-ev-thumb{width:32px; height:32px; border-radius:3px; object-fit:cover;
+               border:1px solid var(--line); cursor:pointer; margin-left:auto}
+  .tl-ev-thumb:hover{border-color:var(--light)}
+
+  /* WS 状态指示 */
+  #wsStatus{font-size:11px; display:inline-flex; align-items:center}
+  #wsStatus .dot{width:6px; height:6px; border-radius:50%; margin-right:4px;
+                  transition:background .2s}
+  #wsStatus.connected .dot{background:var(--light)}
+  #wsStatus.connecting .dot{background:var(--gold); animation:pulse 1.2s infinite}
+  #wsStatus.disconnected .dot{background:var(--red)}
+  @keyframes pulse{0%,100%{opacity:.3}50%{opacity:1}}
+
+  /* 战况事件（保留旧样式备用） */
   .ev{border-left:3px solid var(--line); padding:6px 10px; margin-top:5px;
       font-size:13px; background:var(--panel2); border-radius:0 6px 6px 0}
   .ev.done{border-color:var(--light)}
@@ -315,7 +352,7 @@
 <!-- ════ 未登录 ════ -->
 <div id="authView">
   <h1 style="margin-top:60px">🎖 锐察队长 · 家长指挥台</h1>
-  <div class="dim">任务下发 · 实时战况 · 申诉审核</div>
+  <div class="dim">任务下发 · 作战指挥台 · 申诉审核</div>
   <div class="card">
     <label>家庭码</label>
     <input id="familyCode" placeholder="注册后生成">
@@ -372,27 +409,14 @@
     </div>
   </div>
 
-  <!-- Tab 4: 战况 -->
-  <div id="feedTab" class="tab">
-    <div class="card">
-      <div class="card-title">📡 实时战况<span class="sp"></span>
-        <span class="dim" id="feedCount" style="font-size:12px"></span>
-      </div>
-      <div class="filter-bar">
-        <button class="on" id="feedFilterAll" onclick="setFeedFilter('all')">全部</button>
-        <button id="feedFilterCompletion" onclick="setFeedFilter('completion')">打卡</button>
-        <button id="feedFilterMission" onclick="setFeedFilter('mission')">对局</button>
-        <button id="feedFilterAppeal" onclick="setFeedFilter('appeal')">申诉</button>
-      </div>
-      <div id="feed"></div>
-    </div>
-  </div>
-
-  <!-- Tab 5: 战绩 -->
+  <!-- Tab 4: 作战指挥台（战绩+战况合并） -->
   <div id="statsTab" class="tab">
     <div class="card">
-      <div class="card-title">🏆 战绩<span class="sp"></span><span class="dim" id="statsPeriodLabel">近7天</span></div>
+      <div class="card-title">📡 作战指挥台<span class="sp"></span>
+        <span class="dim" id="statsPeriodLabel">近7天</span>
+      </div>
 
+      <!-- 顶栏 4 个核心数字 -->
       <div class="stat-hero">
         <div class="big">
           <div class="v" id="statTabDone">-</div>
@@ -413,10 +437,11 @@
       </div>
 
       <div style="text-align:center; margin-bottom:8px">
-        <span class="dim" style="font-size:13px">近7天完成率</span>
+        <span class="dim" style="font-size:13px">完成率</span>
         <div style="font-size:28px; font-weight:800; color:var(--light); line-height:1.1" id="statTabRate">--%</div>
       </div>
 
+      <!-- 7 日折线图 -->
       <div class="chart-box">
         <svg class="chart-svg" id="statsChart" viewBox="0 0 280 120" preserveAspectRatio="none"></svg>
         <div class="chart-legend">
@@ -424,11 +449,24 @@
           <span><span class="dot o"></span>已逾期</span>
         </div>
       </div>
+    </div>
 
-      <div class="card-title" style="margin-top:14px; font-size:14px">📷 今日凭证<span class="sp"></span>
-        <span class="dim" id="evidCount"></span>
+    <!-- 统一时间线（实时战况 + 历史追溯） -->
+    <div class="card" style="margin-top:12px">
+      <div class="card-title">⏱ 统一时间线<span class="sp"></span>
+        <span style="font-size:11px" class="dim" id="wsStatus">
+          <span class="dot" style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--sub);margin-right:4px"></span>未连接
+        </span>
       </div>
-      <div id="evidList" style="display:flex; gap:6px; flex-wrap:wrap; margin-top:6px"></div>
+      <div class="filter-bar">
+        <button class="on" id="tlFilterAll" onclick="setTimelineFilter('all')">全部</button>
+        <button id="tlFilterCompletion" onclick="setTimelineFilter('task_completion')">✅ 打卡</button>
+        <button id="tlFilterMission" onclick="setTimelineFilter('mission_result')">🎯 对局</button>
+        <button id="tlFilterAppeal" onclick="setTimelineFilter('appeal_submitted')">⚖️ 申诉</button>
+        <button id="tlFilter7d" onclick="setTimelineRange(7)">近7天</button>
+        <button id="tlFilter30d" onclick="setTimelineRange(30)">近30天</button>
+      </div>
+      <div id="timeline"></div>
     </div>
   </div>
 
@@ -524,8 +562,7 @@
   <button id="navTask" class="on" onclick="switchTab('task')">📋 今日</button>
   <button id="navTmpl" onclick="switchTab('tmpl')">📚 模板</button>
   <button id="navAppeal" onclick="switchTab('appeal')">⚖️ 申诉<span class="badge" id="appealBadge" style="display:none">0</span></button>
-  <button id="navFeed" onclick="switchTab('feed')">📡 战况</button>
-  <button id="navStats" onclick="switchTab('stats')">🏆 战绩</button>
+  <button id="navStats" onclick="switchTab('stats')">📡 作战</button>
   <button id="navAdmin" onclick="switchTab('admin')">⚙️ 设置</button>
 </div>
 
@@ -830,18 +867,15 @@ function switchTab(t){
   $("taskTab").classList.toggle("active", t==="task");
   $("tmplTab").classList.toggle("active", t==="tmpl");
   $("appealTab").classList.toggle("active", t==="appeal");
-  $("feedTab").classList.toggle("active", t==="feed");
   $("statsTab").classList.toggle("active", t==="stats");
   $("adminTab").classList.toggle("active", t==="admin");
   $("navTask").className = t==="task" ? "on" : "";
   $("navTmpl").className = t==="tmpl" ? "on" : "";
   $("navAppeal").className = t==="appeal" ? "on" : "";
-  $("navFeed").className = t==="feed" ? "on" : "";
   $("navStats").className = t==="stats" ? "on" : "";
   $("navAdmin").className = t==="admin" ? "on" : "";
   if(t==="tmpl") loadTemplates();
   if(t==="appeal") loadAppeals("PENDING");
-  if(t==="feed") renderFeed();
   if(t==="stats") loadStats();
   if(t==="admin") loadAdmin();
   // FAB 只在「今日」页显示
@@ -1483,41 +1517,174 @@ async function showAppealEvidence(evIds){
 }
 
 // ============================================================
-// 战况（实时事件流）
+// 作战指挥台（统一时间线）
 // ============================================================
-const FEED_FILTERS = {
-  all: ev => true,
-  completion: ev => ev.kind === "task_completion",
-  mission: ev => ev.kind === "mission_result",
-  appeal: ev => ev.kind === "appeal_submitted"
-};
+let timelineDays = 7;       // 默认近7天
+let timelineKind = 'all';    // 筛选类型
+let timelineData = [];       // 拍平的事件列表
+let timelineByDay = {};      // 按天分组
+let timelineDaysList = [];   // 天列表（用于顺序）
+let collapsedDays = {};      // 哪些天折叠了
 
-function setFeedFilter(f){
-  feedFilter = f;
+async function loadTimeline(){
+  try {
+    const j = await api(`/api/parent/history?since_days=${timelineDays}${timelineKind!=='all'?'&kind='+timelineKind:''}`);
+    timelineByDay = j.by_day || {};
+    timelineDaysList = j.days || [];
+    // 拍平
+    timelineData = [];
+    for(const day of timelineDaysList){
+      for(const ev of (timelineByDay[day]||[])){
+        timelineData.push({...ev, day});
+      }
+    }
+    collapsedDays = {};
+    renderTimeline();
+  } catch(e){
+    $("timeline").innerHTML = '<div class="dim" style="padding:16px;text-align:center">加载失败 '+esc(e.message)+'</div>';
+  }
+}
+
+function setTimelineFilter(k){
+  timelineKind = k;
   ["All","Completion","Mission","Appeal"].forEach(name => {
-    const btn = $("feedFilter"+name);
-    btn.classList.toggle("on", name.toLowerCase() === f || (f==="all" && name==="All"));
+    const id = "tlFilter" + name;
+    const el = $(id);
+    if(el) el.classList.toggle("on", k==="all" ? name==="All" : k.includes(name.toLowerCase()));
   });
-  renderFeed();
+  loadTimeline();
 }
 
-function addFeed(ev){
-  // ⚠️ 隐私：拍照任务的图片本身就不在事件流里，但题目要求"战况看不到需要拍照的任务详情"——
-  // 战况只显示标题+状态，照片只能去「申诉」页查看凭证。
-  allEvents.unshift(ev);
-  if(allEvents.length > 100) allEvents.length = 100;
-  $("feedCount").textContent = allEvents.length + " 条";
-  if($("feedTab").classList.contains("active")) renderFeed();
+function setTimelineRange(days){
+  timelineDays = days;
+  ["7d","30d"].forEach(s => {
+    const el = $("tlFilter"+s.replace("d","d").replace("7d","7d").replace("30d","30d"));
+    if(el) el.classList.toggle("on", false);
+  });
+  const el = $(timelineDays===7?"tlFilter7d":"tlFilter30d");
+  if(el) el.classList.toggle("on", true);
+  loadTimeline();
 }
 
-function renderFeed(){
-  const filtered = allEvents.filter(FEED_FILTERS[feedFilter] || (()=>true));
-  $("feed").innerHTML = filtered.slice(0, 50).map(ev => {
-    const cls = ev.kind === "task_completion" ? (ev.data.state==="DONE" ? "done" : "overdue")
-              : ev.kind === "mission_result" ? "mission"
-              : ev.kind === "appeal_submitted" ? "evid" : "";
-    return `<div class="ev ${cls}">${ev.html}</div>`;
-  }).join("") || '<div class="empty"><div class="icon">📡</div><div>暂无事件</div></div>';
+function renderTimeline(){
+  const el = $("timeline");
+  if(!timelineData.length){
+    el.innerHTML = '<div class="dim" style="padding:20px;text-align:center;font-size:13px">📭 暂无事件记录</div>';
+    return;
+  }
+  el.innerHTML = timelineDaysList.map(day => {
+    const evs = timelineByDay[day]||[];
+    const summaries = {};
+    // 算每日小计
+    const done = evs.filter(e=>e.kind==="task_completion"&&e.state==="DONE").length;
+    const overdue = evs.filter(e=>e.kind==="task_completion"&&e.state==="OVERDONE").length;
+    const merit = evs.reduce((s,e)=>s+(e.merit_delta||0),0);
+    const collapsed = collapsedDays[day];
+    const subDays = ["周日","周一","周二","周三","周四","周五","周六"];
+    const d = new Date(day);
+    const weekday = subDays[d.getDay()];
+    return `<div class="tl-day">
+      <div class="tl-day-header ${collapsed?'collapsed':''}" onclick="toggleDay('${day}')">
+        <span class="tl-day-label">${day} ${weekday}</span>
+        <span class="tl-day-summary">
+          ${done?`<span style="color:var(--light)">✅${done}</span>`:""}
+          ${overdue?`<span style="color:var(--red)">❌${overdue}</span>`:""}
+          ${merit?`<span style="color:var(--gold)">功${merit>0?'+':''}${merit}</span>`:""}
+          <span style="color:var(--sub);font-size:11px">${evs.length} 条</span>
+          <span class="tl-arrow">${collapsed?"▼":"▲"}</span>
+        </span>
+      </div>
+      <div class="tl-day-events ${collapsed?'hidden':''}">
+        ${evs.map(ev => renderTimelineEvent(ev)).join("")}
+      </div>
+    </div>`;
+  }).join("");
+}
+
+function toggleDay(day){
+  collapsedDays[day] = !collapsedDays[day];
+  renderTimeline();
+}
+
+function renderTimelineEvent(ev){
+  const ts = formatTime(ev.created_at);
+  const device = esc(ev.device_name||"");
+  if(ev.kind === "task_completion"){
+    const ok = ev.state === "DONE";
+    const icon = ok ? "✅" : "❌";
+    const cls = ok ? "border-left-color:var(--light)" : "border-left-color:var(--red)";
+    const meritTxt = ev.merit_delta ? (ev.merit_delta>0?`+${ev.merit_delta}`:ev.merit_delta) : "";
+    return `<div class="tl-ev" style="${cls}">
+      <div class="tl-ev-icon">${icon}</div>
+      <div class="tl-ev-body">
+        <div class="tl-ev-title">${esc(ev.title||"未知任务")} <span class="tl-ev-time">${ts}</span></div>
+        <div class="tl-ev-meta">
+          ${ok?"已完成":"已逾期"}
+          ${meritTxt?`<span style="color:${ev.merit_delta>0?'var(--gold)':'var(--red)'}"> ${meritTxt}功</span>`:""}
+          ${ev.evidence_id?`<img class="tl-ev-thumb" src="/api/evidence/${ev.evidence_id}?token=${parentToken}" onclick="openLightbox(${ev.evidence_id},'${esc(ev.title)}','${ts}')">`:""}
+          ${device?`<span class="dim"> · ${device}</span>`:""}
+        </div>
+      </div>
+    </div>`;
+  }
+  if(ev.kind === "mission_result"){
+    const score = ev.score||"";
+    return `<div class="tl-ev" style="border-left-color:var(--gold)">
+      <div class="tl-ev-icon">🎯</div>
+      <div class="tl-ev-body">
+        <div class="tl-ev-title">${esc(ev.title||"对局")} <span class="tl-ev-time">${ts}</span></div>
+        <div class="tl-ev-meta">
+          ${ev.result||"已完成"}
+          ${score?` <span style="color:var(--gold)">${score}分</span>`:""}
+          ${device?`<span class="dim"> · ${device}</span>`:""}
+        </div>
+      </div>
+    </div>`;
+  }
+  if(ev.kind === "appeal_submitted"){
+    return `<div class="tl-ev" style="border-left-color:var(--blue)">
+      <div class="tl-ev-icon">⚖️</div>
+      <div class="tl-ev-body">
+        <div class="tl-ev-title">${esc(ev.title||"申诉")} <span class="tl-ev-time">${ts}</span></div>
+        <div class="tl-ev-meta">
+          申诉状态: ${ev.appeal_status||"待处理"}
+          ${device?`<span class="dim"> · ${device}</span>`:""}
+        </div>
+      </div>
+    </div>`;
+  }
+  return `<div class="tl-ev" style="border-left-color:var(--sub)">
+    <div class="tl-ev-icon">📡</div>
+    <div class="tl-ev-body">
+      <div class="tl-ev-title">${esc(ev.kind)} <span class="tl-ev-time">${ts}</span></div>
+    </div>
+  </div>`;
+}
+
+// WebSocket 实时推送：收到事件直接插入时间线顶部
+function onTimelinePush(ev){
+  // ev: {kind, data:{...}, created_at, device_name}
+  const p = ev.data||{};
+  const day = new Date(ev.created_at||Date.now()*1000).toISOString().slice(0,10);
+  const parsed = {
+    id: 'live-'+Date.now(),
+    kind: ev.kind,
+    created_at: ev.created_at||Math.floor(Date.now()/1000),
+    device_name: ev.device_name||"",
+    task_id: p.task_id||"",
+    title: p.title||"",
+    state: p.state||"",
+    merit_delta: p.merit_delta||0,
+    points_delta: p.points_delta||0,
+    evidence_id: p.evidence_id,
+    day: day,
+  };
+  if(timelineKind!=="all" && ev.kind!==timelineKind) return;
+  if(!timelineByDay[day]){ timelineByDay[day]=[]; }
+  timelineByDay[day].unshift(parsed);
+  if(!timelineDaysList.includes(day)){ timelineDaysList.unshift(day); }
+  // 更新 totals（简单刷新数字）
+  if($("statsTab").classList.contains("active")) renderTimeline();
 }
 
 // ── 大图查看器 ────────────────────────────────────────────────
@@ -1547,12 +1714,9 @@ async function loadStats(){
     $("statTabMerit").textContent = (s.merit > 0 ? '+' : '') + s.merit;
     $("statTabPoints").textContent = (s.points > 0 ? '+' : '') + s.points;
     $("statTabRate").textContent = s.completion_rate + '%';
-    // 画折线图
     drawStatsChart(statsJ.days || []);
-    // 今日凭证
-    const allTodayEvid = Object.values(taskEvidence).flat();
-    $("evidCount").textContent = `共 ${allTodayEvid.length} 张`;
-    if(allTodayEvid.length){
+    // 加载统一时间线
+    loadTimeline();
       $("evidList").innerHTML = allTodayEvid.slice(0,12).map(e =>
         `<img style="width:56px;height:56px;border-radius:4px;border:1px solid var(--line);object-fit:cover;cursor:pointer"
            src="/api/evidence/${e.id}?token=${parentToken}" onclick="openLightbox(${e.id},'${esc(e.title)}','${formatTime(e.at)}')">`
@@ -1704,24 +1868,38 @@ async function submitReset(){
   }
 }
 
+function updateWsStatus(status){
+  const el = $("wsStatus");
+  if(!el) return;
+  el.className = status;
+  const labels = {connected:"已实时同步",connecting:"连接中…",disconnected:"未连接"};
+  el.innerHTML = `<span class="dot"></span>${labels[status]||status}`;
+}
+
 function connectWS(){
   if(ws) ws.close();
+  updateWsStatus("connecting");
   const proto = location.protocol==="https:"?"wss":"ws";
   ws = new WebSocket(`${proto}://${location.host}/ws/parent?token=${encodeURIComponent(parentToken)}`);
+  ws.onopen = () => updateWsStatus("connected");
   ws.onmessage = e => {
     try{
       const m = JSON.parse(e.data);
       if(m.type==="device_status") renderDevStatus(m);
       else if(m.type==="event") {
         renderEvent(m.event);
-        // task_completion / mission_result 进来就刷新今日状态
+        onTimelinePush(m.event);        // 实时推入时间线
         const k = m.event.kind;
         if(k==="task_completion"||k==="mission_result") loadTodayStates();
       }
-      else if(m.type==="events_backlog") (m.events||[]).slice().reverse().forEach(renderEvent);
+      else if(m.type==="events_backlog") (m.events||[]).slice().reverse().forEach(e => { renderEvent(e); onTimelinePush(e); });
     }catch(_){}
   };
-  ws.onclose = () => { setTimeout(() => { if(parentToken) connectWS(); }, 5000); };
+  ws.onerror = () => updateWsStatus("disconnected");
+  ws.onclose = () => {
+    updateWsStatus("disconnected");
+    setTimeout(() => { if(parentToken) connectWS(); }, 5000);
+  };
 }
 
 function renderEvent(ev){
