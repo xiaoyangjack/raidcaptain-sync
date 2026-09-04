@@ -191,6 +191,9 @@
   .task{transition:border-color .25s, transform .25s, opacity .25s}
   .task.task-inactive{opacity:.55; border-style:dashed}
   .task.task-new{animation:taskEnter 2s ease-out}
+  .task.task-done{border-color:var(--light); background:rgba(139,172,15,.05)}
+  .task.task-overdue{border-color:var(--red); background:rgba(224,91,75,.05)}
+  .task.task-pending{border-color:var(--gold)}
   @keyframes taskEnter{
     0%   {transform:translateY(-8px); box-shadow:0 0 0 2px var(--gold)}
     30%  {transform:translateY(0);    box-shadow:0 0 0 3px var(--gold)}
@@ -201,6 +204,51 @@
             border:1px solid var(--line); font-size:13px; line-height:1;
             display:flex; align-items:center; justify-content:center; cursor:pointer}
   .task-del:hover{color:var(--red); border-color:var(--red)}
+
+  /* 任务状态徽章（大圆图标） */
+  .task-status-badge{position:absolute; top:6px; right:36px;
+                    width:26px; height:26px; border-radius:50%;
+                    display:flex; align-items:center; justify-content:center;
+                    font-size:14px; line-height:1; cursor:default}
+  .task-status-badge.state-pending{background:rgba(242,193,78,.18); color:var(--gold); border:1px solid var(--gold)}
+  .task-status-badge.state-done{background:rgba(139,172,15,.22); color:var(--light); border:1px solid var(--light)}
+  .task-status-badge.state-overdue{background:rgba(224,91,75,.2); color:var(--red); border:1px solid var(--red)}
+  .task-status-badge.state-evidence{background:rgba(79,195,247,.2); color:var(--blue); border:1px solid var(--blue)}
+
+  /* 任务缩略图（点开看大图） */
+  .task-thumbs{display:flex; gap:4px; margin-top:6px; flex-wrap:wrap}
+  .task-thumb{width:48px; height:48px; border-radius:4px; border:1px solid var(--line);
+              cursor:pointer; object-fit:cover; background:var(--panel2)}
+  .task-thumb:hover{border-color:var(--light); transform:scale(1.05)}
+
+  /* 战绩图表 */
+  .stat-hero{display:grid; grid-template-columns:repeat(2, 1fr); gap:8px; margin-bottom:10px}
+  .stat-hero .big{background:var(--panel); border:1px solid var(--line); border-radius:10px;
+                  padding:14px; text-align:center}
+  .stat-hero .big .v{font-size:28px; font-weight:800; line-height:1; color:var(--light)}
+  .stat-hero .big .l{font-size:11px; color:var(--sub); margin-top:4px; letter-spacing:1px}
+  .stat-hero .big.warn .v{color:var(--gold)}
+  .stat-hero .big.bad .v{color:var(--red)}
+  .stat-hero .big.blue .v{color:var(--blue)}
+
+  .chart-box{background:var(--panel); border:1px solid var(--line); border-radius:10px;
+             padding:12px; margin-top:8px}
+  .chart-svg{width:100%; height:140px; display:block}
+  .chart-legend{display:flex; gap:14px; font-size:11px; color:var(--sub); margin-top:6px; justify-content:center}
+  .chart-legend .dot{display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:4px; vertical-align:middle}
+  .chart-legend .dot.d{background:var(--light)}
+  .chart-legend .dot.o{background:var(--red)}
+
+  /* 大图查看器 */
+  .lightbox{position:fixed; inset:0; background:rgba(0,0,0,.92); z-index:500;
+            display:none; align-items:center; justify-content:center; flex-direction:column;
+            padding:20px}
+  .lightbox.active{display:flex}
+  .lightbox img{max-width:100%; max-height:75vh; border-radius:6px; box-shadow:0 0 30px rgba(0,0,0,.5)}
+  .lightbox .lb-meta{color:var(--sub); font-size:12px; margin-top:10px; text-align:center}
+  .lightbox .lb-close{position:absolute; top:18px; right:18px; width:36px; height:36px;
+                      border-radius:50%; background:rgba(255,255,255,.15); color:#fff;
+                      border:0; font-size:18px; cursor:pointer}
 
   /* 模态框错误条 */
   .form-error{display:flex; align-items:center; gap:8px; padding:9px 11px;
@@ -321,7 +369,58 @@
       <div id="feed"></div>
     </div>
   </div>
+
+  <!-- Tab 5: 战绩 -->
+  <div id="statsTab" class="tab">
+    <div class="card">
+      <div class="card-title">🏆 战绩<span class="sp"></span><span class="dim" id="statsPeriodLabel">近7天</span></div>
+
+      <div class="stat-hero">
+        <div class="big">
+          <div class="v" id="statDone">-</div>
+          <div class="l">完成任务</div>
+        </div>
+        <div class="big bad">
+          <div class="v" id="statOverdue">-</div>
+          <div class="l">逾期次数</div>
+        </div>
+        <div class="big warn">
+          <div class="v" id="statMerit">-</div>
+          <div class="l">累计功绩</div>
+        </div>
+        <div class="big blue">
+          <div class="v" id="statPoints">-</div>
+          <div class="l">累计纲纪</div>
+        </div>
+      </div>
+
+      <div style="text-align:center; margin-bottom:8px">
+        <span class="dim" style="font-size:13px">近7天完成率</span>
+        <div style="font-size:28px; font-weight:800; color:var(--light); line-height:1.1" id="statRate">--%</div>
+      </div>
+
+      <div class="chart-box">
+        <svg class="chart-svg" id="statsChart" viewBox="0 0 280 120" preserveAspectRatio="none"></svg>
+        <div class="chart-legend">
+          <span><span class="dot d"></span>已完成</span>
+          <span><span class="dot o"></span>已逾期</span>
+        </div>
+      </div>
+
+      <div class="card-title" style="margin-top:14px; font-size:14px">📷 今日凭证<span class="sp"></span>
+        <span class="dim" id="evidCount"></span>
+      </div>
+      <div id="evidList" style="display:flex; gap:6px; flex-wrap:wrap; margin-top:6px"></div>
+    </div>
+  </div>
 </div>
+</div>
+
+<!-- ════ 大图查看器 ════ -->
+<div class="lightbox" id="lightbox" onclick="closeLightbox()">
+  <button class="lb-close" onclick="closeLightbox()">✕</button>
+  <img id="lbImg" src="" alt="">
+  <div class="lb-meta" id="lbMeta"></div>
 </div>
 
 <!-- ════ 底部导航 ════ -->
@@ -330,6 +429,7 @@
   <button id="navTmpl" onclick="switchTab('tmpl')">📚 模板</button>
   <button id="navAppeal" onclick="switchTab('appeal')">⚖️ 申诉<span class="badge" id="appealBadge" style="display:none">0</span></button>
   <button id="navFeed" onclick="switchTab('feed')">📡 战况</button>
+  <button id="navStats" onclick="switchTab('stats')">🏆 战绩</button>
 </div>
 
 <!-- ════ 新增军令弹窗 ════ -->
@@ -458,6 +558,8 @@ let currentTaskView = 'today';   // 'today' | 'all'
 let isDispatching = false;       // 下发进行中防重入
 let lastSyncRev = 0;             // 跟踪服务器 revision
 let lastFailedTask = null;       // 失败重试用
+let taskStates = {};             // {task_id: {state, device, evidence, created_at}}
+let taskEvidence = {};           // {task_id: [{id, title, size, at}]}
 
 const $ = id => document.getElementById(id);
 const toast = (m, type='info') => {
@@ -469,6 +571,12 @@ const toast = (m, type='info') => {
   t._h = setTimeout(() => t.style.display = "none", type === 'error' ? 5000 : 2400);
 };
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+function formatTime(ms){
+  if(!ms) return "";
+  const d = new Date(ms);
+  const pad = n => String(n).padStart(2,"0");
+  return `${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
 
 const DAYS = ["一","二","三","四","五","六","日"];
 const newTaskId = () => (crypto.randomUUID ? crypto.randomUUID() :
@@ -619,13 +727,16 @@ function switchTab(t){
   $("tmplTab").classList.toggle("active", t==="tmpl");
   $("appealTab").classList.toggle("active", t==="appeal");
   $("feedTab").classList.toggle("active", t==="feed");
+  $("statsTab").classList.toggle("active", t==="stats");
   $("navTask").className = t==="task" ? "on" : "";
   $("navTmpl").className = t==="tmpl" ? "on" : "";
   $("navAppeal").className = t==="appeal" ? "on" : "";
   $("navFeed").className = t==="feed" ? "on" : "";
+  $("navStats").className = t==="stats" ? "on" : "";
   if(t==="tmpl") loadTemplates();
   if(t==="appeal") loadAppeals("PENDING");
   if(t==="feed") renderFeed();
+  if(t==="stats") loadStats();
   // FAB 只在「今日」页显示
   $("fab").style.display = (t==="task") ? "block" : "none";
 }
@@ -697,11 +808,21 @@ async function loadTasks(){
     const j = await api("/api/parent/tasks");
     activeTasks = (j.tasks || []).filter(x => x.active !== false);
     lastSyncRev = j.revision || lastSyncRev;
+    loadTodayStates();
     renderToday();
   }catch(e){
     const r = detectError(e);
     toast(r.msg, "error");
   }
+}
+
+async function loadTodayStates(){
+  try{
+    const j = await api("/api/parent/today-states");
+    taskStates = j.states || {};
+    taskEvidence = j.evidence || {};
+    renderToday();
+  }catch(e){}
 }
 
 /** 切换今日 / 全部 视图 */
@@ -750,8 +871,43 @@ function renderToday(){
   $("todayList").innerHTML = sorted.map(t => {
     const [hh, mm] = (t.due_time||"19:00").split(":");
     const active = isActiveToday(t);
+    const st = taskStates[t.task_id];
+    let badgeHtml = '', stateClass = '', extraBadge = '';
+    if (active && st) {
+      if (st.state === 'DONE') {
+        badgeHtml = `<div class="task-status-badge state-done" title="${esc(st.device||'')} 已完成">✅</div>`;
+        stateClass = 'task-done';
+        if (st.evidence) extraBadge = `<div class="task-status-badge state-evidence" title="有照片">📷</div>`;
+      } else {
+        badgeHtml = `<div class="task-status-badge state-overdue" title="${esc(st.device||'')} 逾期">❌</div>`;
+        stateClass = 'task-overdue';
+      }
+    } else if (active) {
+      const now = new Date();
+      const [dhh, dmm] = (t.due_time||"19:00").split(":").map(Number);
+      const dueMs = new Date(now.getFullYear(), now.getMonth(), now.getDate(), dhh, dmm).getTime();
+      if (Date.now() > dueMs) {
+        badgeHtml = `<div class="task-status-badge state-overdue" title="已到点，未完成">⏰</div>`;
+        stateClass = 'task-overdue';
+      } else {
+        badgeHtml = `<div class="task-status-badge state-pending" title="待完成">⏳</div>`;
+        stateClass = 'task-pending';
+      }
+    }
+    const evList = taskEvidence[t.task_id] || [];
+    const thumbsHtml = evList.length ? `
+      <div class="task-thumbs">
+        ${evList.slice(0,4).map(e => `<img class="task-thumb" loading="lazy"
+            src="/api/evidence/${e.id}"
+            onclick="openLightbox(${e.id},'${esc(t.title)}','${formatTime(e.at)}',event)"
+            alt="${esc(t.title)}">`).join("")}
+        ${evList.length>4?`<div style="display:flex;align-items:center;justify-content:center;width:48px;height:48px;border-radius:4px;border:1px solid var(--line);background:var(--panel2);color:var(--sub);font-size:11px">+${evList.length-4}</div>`:''}
+      </div>` : '';
+    const stateChip = st && st.state==='DONE' ? `<span class="chip" style="color:var(--light);border-color:var(--light)">已完成</span>`
+                : (st && st.state!=='DONE' ? `<span class="chip" style="color:var(--red);border-color:var(--red)">逾期</span>` : '');
+    const devText = st ? ` · ${esc(st.device||'')}` : '';
     return `
-      <div class="task ${active?'':'task-inactive'}" data-tid="${esc(t.task_id)}">
+      <div class="task ${active?'':'task-inactive'} ${stateClass}" data-tid="${esc(t.task_id)}">
         <div class="task-time">
           <div class="h">${hh}</div><div class="m">:${mm}</div>
         </div>
@@ -761,10 +917,14 @@ function renderToday(){
             <span class="chip ${prioClass(t.priority)}">${prioName(t.priority)}</span>
             ${t.mandatory?'<span class="chip mand">强制</span>':''}
             ${t.require_evidence?'<span class="chip evid">📷拍照</span>':''}
-            ${!active ? '<span class="chip">非今日</span>' : ''}
+            ${!active?'<span class="chip">非今日</span>':''}
+            ${stateChip}
           </div>
-          <div class="task-meta">${maskName(t.days_mask)} · 功绩+${t.merit_reward}${t.merit_penalty?"/逾期-"+t.merit_penalty:""}</div>
+          <div class="task-meta">${maskName(t.days_mask)} · 功绩+${t.merit_reward}${t.merit_penalty?"/逾期-"+t.merit_penalty:""}${devText}</div>
+          ${thumbsHtml}
         </div>
+        ${badgeHtml}
+        ${extraBadge}
         <button class="task-del" onclick="deleteActiveTask('${esc(t.task_id)}')" title="删除">×</button>
       </div>`;
   }).join("");
@@ -1190,6 +1350,80 @@ function renderFeed(){
   }).join("") || '<div class="empty"><div class="icon">📡</div><div>暂无事件</div></div>';
 }
 
+// ── 大图查看器 ────────────────────────────────────────────────
+function openLightbox(evId, title, time, event){
+  event.stopPropagation();
+  $("lbImg").src = `/api/evidence/${evId}`;
+  $("lbMeta").textContent = `${esc(title)} · ${time}`;
+  $("lightbox").classList.add("active");
+}
+function closeLightbox(){
+  $("lightbox").classList.remove("active");
+  $("lbImg").src = "";
+}
+
+// ── 战绩统计 ─────────────────────────────────────────────────
+async function loadStats(){
+  try {
+    const [statesJ, statsJ] = await Promise.all([
+      api("/api/parent/today-states"),
+      api("/api/parent/stats?days=7")
+    ]);
+    taskStates = statesJ.states || {};
+    taskEvidence = statesJ.evidence || {};
+    const s = statsJ.totals;
+    $("statDone").textContent = s.done;
+    $("statOverdue").textContent = s.overdue;
+    $("statMerit").textContent = (s.merit > 0 ? '+' : '') + s.merit;
+    $("statPoints").textContent = (s.points > 0 ? '+' : '') + s.points;
+    $("statRate").textContent = s.completion_rate + '%';
+    // 画折线图
+    drawStatsChart(statsJ.days || []);
+    // 今日凭证
+    const allTodayEvid = Object.values(taskEvidence).flat();
+    $("evidCount").textContent = `共 ${allTodayEvid.length} 张`;
+    if(allTodayEvid.length){
+      $("evidList").innerHTML = allTodayEvid.slice(0,12).map(e =>
+        `<img style="width:56px;height:56px;border-radius:4px;border:1px solid var(--line);object-fit:cover;cursor:pointer"
+           src="/api/evidence/${e.id}" onclick="openLightbox(${e.id},'${esc(e.title)}','${formatTime(e.at)}',event)">`
+      ).join("");
+    } else {
+      $("evidList").innerHTML = '<div class="dim" style="font-size:12px">今日暂无打卡凭证</div>';
+    }
+  } catch(e) {
+    console.warn("loadStats error", e);
+  }
+}
+
+function drawStatsChart(days){
+  const svg = $("statsChart");
+  if(!days.length){ svg.innerHTML = ''; return; }
+  const W = 280, H = 120, PADL = 28, PADR = 8, PADT = 8, PADB = 28;
+  const cW = W - PADL - PADR, cH = H - PADT - PADB;
+  const n = days.length;
+  const maxY = Math.max(1, ...days.map(d => d.done + d.overdue));
+  const xOf = i => PADL + i * (cW / Math.max(1, n - 1));
+  const yOf = v => PADT + cH - (v / maxY) * cH;
+
+  const ptsDone = days.map((d, i) => `${xOf(i)},${yOf(d.done)}`).join(' ');
+  const ptsOver = days.map((d, i) => `${xOf(i)},${yOf(d.done + d.overdue)}`).join(' ');
+
+  // X 轴标签
+  const labels = days.map((d, i) => {
+    const parts = d.date.split('-');
+    return `<text x="${xOf(i)}" y="${H-4}" text-anchor="middle" font-size="9" fill="var(--sub)">${parts[1]}/${parts[2]}</text>`;
+  }).join('');
+
+  svg.innerHTML = `
+    <polyline points="${ptsDone}" fill="none" stroke="var(--light)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+    <polyline points="${ptsOver}" fill="none" stroke="var(--red)" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="3,2"/>
+    ${labels}
+    <!-- Y 轴 -->
+    <text x="${PADL-4}" y="${PADT+4}" text-anchor="end" font-size="9" fill="var(--sub)">${maxY}</text>
+    <text x="${PADL-4}" y="${H-PADB}" text-anchor="end" font-size="9" fill="var(--sub)">0</text>
+  `;
+}
+
 function connectWS(){
   if(ws) ws.close();
   const proto = location.protocol==="https:"?"wss":"ws";
@@ -1198,7 +1432,12 @@ function connectWS(){
     try{
       const m = JSON.parse(e.data);
       if(m.type==="device_status") renderDevStatus(m);
-      else if(m.type==="event") renderEvent(m.event);
+      else if(m.type==="event") {
+        renderEvent(m.event);
+        // task_completion / mission_result 进来就刷新今日状态
+        const k = m.event.kind;
+        if(k==="task_completion"||k==="mission_result") loadTodayStates();
+      }
       else if(m.type==="events_backlog") (m.events||[]).slice().reverse().forEach(renderEvent);
     }catch(_){}
   };

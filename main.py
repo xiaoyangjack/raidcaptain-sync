@@ -423,6 +423,125 @@ def status(authorization: Optional[str] = Header(None)):
             "pending_appeals": pending_appeals,
         }
 
+
+@app.get("/api/parent/today-states")
+def parent_today_states(authorization: Optional[str] = Header(None)):
+    """【M2.7】家长拉取今日（按服务器本地日期）每条军令的执行状态。
+    返回每个 task_id 对应最新一次完成/逾期事件 + 该任务的现场照列表。"""
+    with get_db() as conn:
+        fam = auth_parent(conn, authorization)
+        fid = fam["id"]
+        now = int(time.time() * 1000)
+        # 今日 0 点（含）到明日 0 点的毫秒区间
+        import datetime
+        today = datetime.date.today()
+        t_start = int(datetime.datetime(today.year, today.month, today.day).timestamp() * 1000)
+        t_end = t_start + 86_400_000
+        rows = conn.execute("""
+            SELECT e._id, e.kind, e.payload, e.created_at, e.device_name
+            FROM event e
+            WHERE e.family_id=? AND e.kind IN ('task_completion','mission_result')
+              AND e.created_at >= ? AND e.created_at < ?
+            ORDER BY e._id DESC
+        """, (fid, t_start, t_end)).fetchall()
+        # 取每条任务的最近一次 task_completion
+        latest_by_task = {}
+        for r in rows:
+            try:
+                p = json.loads(r["payload"]) if r["payload"] else {}
+            except Exception:
+                p = {}
+            tid = p.get("task_id")
+            if r["kind"] == "task_completion" and tid and tid not in latest_by_task:
+                latest_by_task[tid] = {
+                    "state": p.get("state", "DONE"),
+                    "created_at": r["created_at"],
+                    "device": r["device_name"],
+                    "evidence": bool(p.get("evidence_b64")),
+                    "title": p.get("title", "")
+                }
+        # 现场照列表
+        ev_rows = conn.execute("""
+            SELECT _id, task_id, task_title, created_at, size_bytes
+            FROM evidence_file
+            WHERE family_id=? AND appeal_session_id='' AND task_id != ''
+              AND created_at >= ? AND created_at < ?
+            ORDER BY _id DESC
+        """, (fid, t_start, t_end)).fetchall()
+        evidence_by_task = {}
+        for r in ev_rows:
+            evidence_by_task.setdefault(r["task_id"], []).append({
+                "id": r["_id"], "title": r["task_title"],
+                "size": r["size_bytes"], "at": r["created_at"]
+            })
+        return {"states": latest_by_task, "evidence": evidence_by_task}
+
+
+@app.get("/api/parent/stats")
+def parent_stats(days: int = 7, authorization: Optional[str] = Header(None)):
+    """【M2.7】战绩统计：最近 N 天每日完成/逾期数 + 累计功绩/纲纪。
+    用于家长端战绩页（折线图 + 数字卡片）。"""
+    days = max(1, min(30, days))
+    with get_db() as conn:
+        fam = auth_parent(conn, authorization)
+        fid = fam["id"]
+        import datetime
+        today = datetime.date.today()
+        start = int(datetime.datetime(today.year, today.month, today.day).timestamp() * 1000) - (days - 1) * 86_400_000
+        # 当日完成/逾期数（按 created_at 日期分桶）
+        events = conn.execute("""
+            SELECT e._id, e.kind, e.payload, e.created_at
+            FROM event e
+            WHERE e.family_id=? AND e.kind='task_completion'
+              AND e.created_at >= ?
+            ORDER BY e._id ASC
+        """, (fid, start)).fetchall()
+        # 7 天柱状图数据
+        by_day = {}
+        for i in range(days):
+            d = (today - datetime.timedelta(days=days-1-i)).isoformat()
+            by_day[d] = {"date": d, "done": 0, "overdue": 0}
+        total_done = 0
+        total_overdue = 0
+        for r in events:
+            try:
+                p = json.loads(r["payload"]) if r["payload"] else {}
+            except Exception:
+                p = {}
+            ts = r["created_at"]
+            d = datetime.datetime.fromtimestamp(ts/1000, tz=datetime.timezone.utc).astimezone().date().isoformat()
+            if d in by_day:
+                if p.get("state") == "DONE":
+                    by_day[d]["done"] += 1
+                    total_done += 1
+                else:
+                    by_day[d]["overdue"] += 1
+                    total_overdue += 1
+        # mission_result 累计功绩/纲纪
+        mission_events = conn.execute("""
+            SELECT payload FROM event
+            WHERE family_id=? AND kind='mission_result' AND created_at >= ?
+        """, (fid, start)).fetchall()
+        total_merit = 0
+        total_points = 0
+        for r in mission_events:
+            try:
+                p = json.loads(r["payload"]) if r["payload"] else {}
+            except Exception:
+                p = {}
+            total_merit += int(p.get("meritDelta", p.get("merit_delta", 0)) or 0)
+            total_points += int(p.get("pointsDelta", p.get("points_delta", 0)) or 0)
+        completion_rate = round(total_done / max(1, total_done + total_overdue) * 100, 1)
+        return {
+            "days": list(by_day.values()),
+            "totals": {
+                "done": total_done, "overdue": total_overdue,
+                "completion_rate": completion_rate,
+                "merit": total_merit, "points": total_points
+            }
+        }
+
+
 # ── 任务模板 API（M2.6）────────────────────────────────────────
 
 
