@@ -395,26 +395,26 @@
 
       <div class="stat-hero">
         <div class="big">
-          <div class="v" id="statDone">-</div>
+          <div class="v" id="statTabDone">-</div>
           <div class="l">完成任务</div>
         </div>
         <div class="big bad">
-          <div class="v" id="statOverdue">-</div>
+          <div class="v" id="statTabOverdue">-</div>
           <div class="l">逾期次数</div>
         </div>
         <div class="big warn">
-          <div class="v" id="statMerit">-</div>
+          <div class="v" id="statTabMerit">-</div>
           <div class="l">累计功绩</div>
         </div>
         <div class="big blue">
-          <div class="v" id="statPoints">-</div>
+          <div class="v" id="statTabPoints">-</div>
           <div class="l">累计纲纪</div>
         </div>
       </div>
 
       <div style="text-align:center; margin-bottom:8px">
         <span class="dim" style="font-size:13px">近7天完成率</span>
-        <div style="font-size:28px; font-weight:800; color:var(--light); line-height:1.1" id="statRate">--%</div>
+        <div style="font-size:28px; font-weight:800; color:var(--light); line-height:1.1" id="statTabRate">--%</div>
       </div>
 
       <div class="chart-box">
@@ -740,18 +740,25 @@ function isActiveToday(t){
 function authHeaders(){ return {"Authorization":"Bearer "+parentToken, "Content-Type":"application/json"}; }
 
 async function api(path, opt={}){
-  try {
+  async function _do(){
     const r = await fetch(API+path, {...opt, headers:{...authHeaders(), ...(opt.headers||{})}});
     if(r.status===401){ logout(true); throw new Error("登录已过期"); }
-    const j = await r.json();
-    if(!r.ok) throw new Error(j.detail || ("HTTP "+r.status));
+    // 解析 JSON 时容忍非 JSON 响应（如 500 纯文本）
+    let j = null;
+    try { j = await r.json(); } catch(_){
+      throw new Error("HTTP " + r.status + "（服务器返回非 JSON）");
+    }
+    if(!r.ok) throw new Error(j.detail || ("HTTP " + r.status));
     return j;
+  }
+  try {
+    return await _do();
   } catch(e){
     if(!parentToken) throw e;
-    const r2 = await fetch(API+path, {...opt, headers:{...authHeaders(), ...(opt.headers||{})}});
-    if(r2.status===401){ logout(true); throw new Error("登录已过期"); }
-    if(!r2.ok){ const j2=await r2.json(); throw new Error(j2.detail||("HTTP "+r2.status)); }
-    return r2.json();
+    // 登录过期不再重试
+    if(e.message && e.message.includes("登录已过期")) throw e;
+    // 第二次重试（容忍网络抖动）
+    try { return await _do(); } catch(_){ throw e; }
   }
 }
 
@@ -1535,11 +1542,11 @@ async function loadStats(){
     taskStates = statesJ.states || {};
     taskEvidence = statesJ.evidence || {};
     const s = statsJ.totals;
-    $("statDone").textContent = s.done;
-    $("statOverdue").textContent = s.overdue;
-    $("statMerit").textContent = (s.merit > 0 ? '+' : '') + s.merit;
-    $("statPoints").textContent = (s.points > 0 ? '+' : '') + s.points;
-    $("statRate").textContent = s.completion_rate + '%';
+    $("statTabDone").textContent = s.done;
+    $("statTabOverdue").textContent = s.overdue;
+    $("statTabMerit").textContent = (s.merit > 0 ? '+' : '') + s.merit;
+    $("statTabPoints").textContent = (s.points > 0 ? '+' : '') + s.points;
+    $("statTabRate").textContent = s.completion_rate + '%';
     // 画折线图
     drawStatsChart(statsJ.days || []);
     // 今日凭证
