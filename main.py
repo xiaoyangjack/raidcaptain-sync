@@ -29,7 +29,11 @@ from fastapi import FastAPI, Header, HTTPException, WebSocket, WebSocketDisconne
 from fastapi.staticfiles import StaticFiles
 
 BASE_DIR = Path(__file__).resolve().parent
-DB_PATH = Path(os.environ.get("RAID_SYNC_DB", BASE_DIR / "sync.db"))
+# 【M2.7】Railway/Zeabur 等平台用 RAID_SYNC_DB 持久卷（默认 /data/sync.db），
+# 避免每次重新部署都把用户数据擦掉。未设置环境变量时回落到容器内目录。
+_PERSIST_DIR = Path(os.environ.get("RAID_SYNC_DIR", "/data"))
+_DEFAULT_DB = _PERSIST_DIR / "sync.db" if _PERSIST_DIR.exists() else BASE_DIR / "sync.db"
+DB_PATH = Path(os.environ.get("RAID_SYNC_DB", _DEFAULT_DB))
 STATIC_DIR = BASE_DIR / "static"
 
 PBKDF2_ITER = 120_000

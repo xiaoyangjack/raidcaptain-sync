@@ -1,6 +1,6 @@
-# Zeabur 部署用 Dockerfile
-# 用途：把 RaidCaptain 同步服务端打包成容器，跑在 Zeabur 的节点上
-# 用法：在 Zeabur 项目里选 "Deploy from Dockerfile"，上传本文件即可
+# RaidCaptain 同步服务端 Dockerfile
+# 适用于 Railway / Zeabur / Fly.io 等容器平台
+# 关键：RAID_SYNC_DIR=/data 指向平台的持久卷，数据重启不丢失
 
 FROM python:3.11-slim
 
@@ -14,8 +14,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY main.py .
 COPY static/ static/
 
-# Zeabur 通过 PORT 环境变量指定端口，服务端读取它
+# 【M2.7】平台端口（Railway/Zeabur 自动注入）
 ENV PORT=8000
+# 【M2.7】持久数据目录（Railway 持久卷默认 /data，Zeabur /var/data）
+ENV RAID_SYNC_DIR=/data
 
 # 启动服务（0.0.0.0 让容器内所有网卡都监听）
-CMD ["sh", "-c", "python3 -m uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+CMD ["sh", "-c", "mkdir -p /data && python3 -m uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}"]
