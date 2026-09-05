@@ -117,6 +117,19 @@ CREATE TABLE IF NOT EXISTS evidence_file(
     created_at INTEGER NOT NULL,
     appeal_session_id TEXT NOT NULL DEFAULT ''
 );
+CREATE TABLE IF NOT EXISTS patrol_session(
+    _id INTEGER PRIMARY KEY AUTOINCREMENT,
+    family_id TEXT NOT NULL,
+    device_name TEXT NOT NULL DEFAULT '',
+    started_at INTEGER NOT NULL,
+    ended_at INTEGER NOT NULL,
+    valid_minutes INTEGER NOT NULL DEFAULT 0,
+    points_delta INTEGER NOT NULL DEFAULT 0,
+    merit_delta INTEGER NOT NULL DEFAULT 0,
+    sessions INTEGER NOT NULL DEFAULT 0,
+    task_name TEXT NOT NULL DEFAULT '',
+    outcome TEXT NOT NULL DEFAULT ''
+);
 """
 
 
@@ -451,6 +464,104 @@ def history_events(
             "by_day": {k: by_day[k] for k in sorted(by_day)},
             "summaries": summaries,
             "total": len(rows),
+        }
+
+
+@app.get("/api/parent/patrol-sessions")
+def parent_patrol_sessions(since_days: int = 7, task: str = "",
+                            authorization: Optional[str] = Header(None)):
+    """【M2.7】家长拉取孩子的学习时段（每段 = 一次 patrol/mission 结算）。
+    包含每段起止时间、专注时长、积分/功绩变化、对局数、任务名。"""
+    with get_db() as conn:
+        fam = auth_parent(conn, authorization)
+        fid = fam["id"]
+        since_ts = int(time.time()) - since_days * 86400
+        sql = "SELECT * FROM patrol_session WHERE family_id=? AND started_at>=?"
+        args = [fid, since_ts]
+        if task:
+            sql += " AND task_name=?"
+            args.append(task)
+        sql += " ORDER BY started_at DESC LIMIT 500"
+        rows = conn.execute(sql, args).fetchall()
+
+        # 按天分组
+        from collections import defaultdict
+        by_day = defaultdict(list)
+        for r in rows:
+            d = time.strftime("%Y-%m-%d", time.localtime(r["started_at"]))
+            by_day[d].append({
+                "id": r["_id"],
+                "device_name": r["device_name"],
+                "task_name": r["task_name"],
+                "started_at": r["started_at"],
+                "ended_at": r["ended_at"],
+                "valid_minutes": r["valid_minutes"],
+                "points_delta": r["points_delta"],
+                "merit_delta": r["merit_delta"],
+                "sessions": r["sessions"],
+                "outcome": r["outcome"],
+            })
+        # 汇总
+        totals = {"valid_minutes": 0, "sessions_count": 0, "points": 0, "merit": 0}
+        for r in rows:
+            totals["valid_minutes"] += r["valid_minutes"]
+            totals["sessions_count"] += r["sessions"]
+            totals["points"] += r["points_delta"]
+            totals["merit"] += r["merit_delta"]
+        # 任务列表（用于筛选）
+        task_rows = conn.execute(
+            "SELECT DISTINCT task_name FROM patrol_session WHERE family_id=? AND task_name!=''",
+            (fid,)).fetchall()
+        tasks = [r["task_name"] for r in task_rows]
+        return {
+            "days": list(reversed(sorted(by_day.keys()))),
+            "by_day": {k: by_day[k] for k in sorted(by_day)},
+            "totals": totals,
+            "tasks": tasks,
+        }
+
+
+@app.get("/api/parent/learning-stats")
+def parent_learning_stats(days: int = 7,
+                            authorization: Optional[str] = Header(None)):
+    """【M2.7】每日学习汇总（用于折线图 + 数字卡）。"""
+    with get_db() as conn:
+        fam = auth_parent(conn, authorization)
+        fid = fam["id"]
+        days = max(1, min(30, days))
+        import datetime
+        today = datetime.date.today()
+        start_dt = today - datetime.timedelta(days=days-1)
+        start_ts = int(datetime.datetime(start_dt.year, start_dt.month, start_dt.day).timestamp())
+        rows = conn.execute(
+            """SELECT started_at, valid_minutes, sessions, points_delta, merit_delta
+               FROM patrol_session WHERE family_id=? AND started_at>=?""",
+            (fid, start_ts)).fetchall()
+        by_day = {}
+        for i in range(days):
+            d = (start_dt + datetime.timedelta(days=i)).isoformat()
+            by_day[d] = {"date": d, "valid_minutes": 0, "sessions": 0,
+                         "points": 0, "merit": 0}
+        for r in rows:
+            d = datetime.datetime.fromtimestamp(r["started_at"]).date().isoformat()
+            if d in by_day:
+                by_day[d]["valid_minutes"] += r["valid_minutes"]
+                by_day[d]["sessions"] += r["sessions"]
+                by_day[d]["points"] += r["points_delta"]
+                by_day[d]["merit"] += r["merit_delta"]
+        # 全部
+        tot_minutes = sum(d["valid_minutes"] for d in by_day.values())
+        tot_sessions = sum(d["sessions"] for d in by_day.values())
+        tot_points = sum(d["points"] for d in by_day.values())
+        tot_merit = sum(d["merit"] for d in by_day.values())
+        return {
+            "days": list(by_day.values()),
+            "totals": {
+                "valid_minutes": tot_minutes,
+                "sessions_count": tot_sessions,
+                "points": tot_points,
+                "merit": tot_merit,
+            }
         }
 
 
@@ -947,6 +1058,22 @@ async def device_push_events(body: dict, authorization: Optional[str] = Header(N
                 )
             stored.append({"kind": kind, "data": payload or {}, "device_name": dev["name"],
                            "created_at": created})
+            # 【M2.7】学习时段记录：mission_result 同时写入 patrol_session 表
+            if kind == "mission_result" and payload:
+                conn.execute(
+                    """INSERT INTO patrol_session(family_id, device_name, started_at, ended_at,
+                        valid_minutes, points_delta, merit_delta, sessions, task_name, outcome)
+                       VALUES(?,?,?,?,?,?,?,?,?,?)""",
+                    (fid, dev["name"],
+                     int(payload.get("start_ms", created * 1000) / 1000),
+                     int(payload.get("end_ms", created * 1000) / 1000),
+                     int(payload.get("valid_minutes", 0)),
+                     int(payload.get("points_delta", 0)),
+                     int(payload.get("merit_delta", 0)),
+                     int(payload.get("sessions", 0)),
+                     str(payload.get("task", payload.get("task_id", ""))),
+                     str(payload.get("outcome", ""))),
+                )
     # 提交后逐条推给在线家长（实时战况流）
     for ev in stored:
         await ws_push(fid, parent_sockets, {"type": "event", "event": ev})
