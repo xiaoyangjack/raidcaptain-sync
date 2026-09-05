@@ -416,38 +416,92 @@
         <span class="dim" id="statsPeriodLabel">近7天</span>
       </div>
 
-      <!-- 顶栏 4 个核心数字 -->
-      <div class="stat-hero">
-        <div class="big">
-          <div class="v" id="statTabDone">-</div>
-          <div class="l">完成任务</div>
+      <!-- 子 Tab 切换：战况 / 学习记录 -->
+      <div class="filter-bar" style="margin-bottom:8px">
+        <button class="on" id="statsSubBtnBattle" onclick="switchStatsSub('battle')">🎯 战况</button>
+        <button id="statsSubBtnLearning" onclick="switchStatsSub('learning')">⏱ 学习记录</button>
+      </div>
+
+      <!-- ═══ 战况视图 ═══ -->
+      <div id="statsBattleView">
+        <!-- 顶栏 4 个核心数字 -->
+        <div class="stat-hero">
+          <div class="big">
+            <div class="v" id="statTabDone">-</div>
+            <div class="l">完成任务</div>
+          </div>
+          <div class="big bad">
+            <div class="v" id="statTabOverdue">-</div>
+            <div class="l">逾期次数</div>
+          </div>
+          <div class="big warn">
+            <div class="v" id="statTabMerit">-</div>
+            <div class="l">累计功绩</div>
+          </div>
+          <div class="big blue">
+            <div class="v" id="statTabPoints">-</div>
+            <div class="l">累计纲纪</div>
+          </div>
         </div>
-        <div class="big bad">
-          <div class="v" id="statTabOverdue">-</div>
-          <div class="l">逾期次数</div>
+
+        <div style="text-align:center; margin-bottom:8px">
+          <span class="dim" style="font-size:13px">完成率</span>
+          <div style="font-size:28px; font-weight:800; color:var(--light); line-height:1.1" id="statTabRate">--%</div>
         </div>
-        <div class="big warn">
-          <div class="v" id="statTabMerit">-</div>
-          <div class="l">累计功绩</div>
-        </div>
-        <div class="big blue">
-          <div class="v" id="statTabPoints">-</div>
-          <div class="l">累计纲纪</div>
+
+        <!-- 7 日折线图 -->
+        <div class="chart-box">
+          <svg class="chart-svg" id="statsChart" viewBox="0 0 280 120" preserveAspectRatio="none"></svg>
+          <div class="chart-legend">
+            <span><span class="dot d"></span>已完成</span>
+            <span><span class="dot o"></span>已逾期</span>
+          </div>
         </div>
       </div>
 
-      <div style="text-align:center; margin-bottom:8px">
-        <span class="dim" style="font-size:13px">完成率</span>
-        <div style="font-size:28px; font-weight:800; color:var(--light); line-height:1.1" id="statTabRate">--%</div>
-      </div>
-
-      <!-- 7 日折线图 -->
-      <div class="chart-box">
-        <svg class="chart-svg" id="statsChart" viewBox="0 0 280 120" preserveAspectRatio="none"></svg>
-        <div class="chart-legend">
-          <span><span class="dot d"></span>已完成</span>
-          <span><span class="dot o"></span>已逾期</span>
+      <!-- ═══ 学习记录视图 ═══ -->
+      <div id="statsLearningView" style="display:none">
+        <div class="stat-hero" style="margin-top:4px">
+          <div class="big">
+            <div class="v" id="learnTotalMinutes">-</div>
+            <div class="l">累计学习(分钟)</div>
+          </div>
+          <div class="big warn">
+            <div class="v" id="learnTotalSessions">-</div>
+            <div class="l">学习时段</div>
+          </div>
+          <div class="big blue">
+            <div class="v" id="learnTotalPoints">-</div>
+            <div class="l">累计积分</div>
+          </div>
+          <div class="big">
+            <div class="v" id="learnTotalMerit">-</div>
+            <div class="l">累计功绩</div>
+          </div>
         </div>
+
+        <!-- 学习分钟折线图 -->
+        <div style="text-align:center; margin:8px 0 4px">
+          <span class="dim" style="font-size:13px">每日学习时长（分钟）</span>
+        </div>
+        <div class="chart-box">
+          <svg class="chart-svg" id="learnChart" viewBox="0 0 280 120" preserveAspectRatio="none"></svg>
+          <div class="chart-legend">
+            <span><span class="dot" style="background:var(--gold)"></span>学习时长</span>
+            <span><span class="dot" style="background:var(--blue)"></span>对局数</span>
+          </div>
+        </div>
+
+        <!-- 任务筛选 -->
+        <div style="margin-top:10px">
+          <div class="card-title" style="font-size:13px;margin-bottom:6px">📋 时段列表
+            <span class="sp"></span><span class="dim" style="font-size:11px" id="learnTaskFilterLabel">全部任务</span>
+          </div>
+          <div class="filter-bar" id="learnTaskFilters"></div>
+        </div>
+
+        <!-- 时段详情列表（按时段分组） -->
+        <div id="learnSessionList" style="margin-top:8px"></div>
       </div>
     </div>
 
@@ -462,6 +516,7 @@
         <button class="on" id="tlFilterAll" onclick="setTimelineFilter('all')">全部</button>
         <button id="tlFilterCompletion" onclick="setTimelineFilter('task_completion')">✅ 打卡</button>
         <button id="tlFilterMission" onclick="setTimelineFilter('mission_result')">🎯 对局</button>
+        <button id="tlFilterLearning" onclick="setTimelineFilter('patrol_session')">⏱ 学习</button>
         <button id="tlFilterAppeal" onclick="setTimelineFilter('appeal_submitted')">⚖️ 申诉</button>
         <button id="tlFilter7d" onclick="setTimelineRange(7)">近7天</button>
         <button id="tlFilter30d" onclick="setTimelineRange(30)">近30天</button>
@@ -1547,23 +1602,27 @@ async function loadTimeline(){
 
 function setTimelineFilter(k){
   timelineKind = k;
-  ["All","Completion","Mission","Appeal"].forEach(name => {
-    const id = "tlFilter" + name;
-    const el = $(id);
-    if(el) el.classList.toggle("on", k==="all" ? name==="All" : k.includes(name.toLowerCase()));
+  const map = {
+    "all": "All",
+    "task_completion": "Completion",
+    "mission_result": "Mission",
+    "patrol_session": "Learning",
+    "appeal_submitted": "Appeal",
+  };
+  const onId = "tlFilter" + (map[k] || "All");
+  ["All","Completion","Mission","Learning","Appeal"].forEach(name => {
+    const el = $("tlFilter" + name);
+    if(el) el.classList.toggle("on", "tlFilter"+name===onId);
   });
   loadTimeline();
 }
 
 function setTimelineRange(days){
   timelineDays = days;
-  ["7d","30d"].forEach(s => {
-    const el = $("tlFilter"+s.replace("d","d").replace("7d","7d").replace("30d","30d"));
-    if(el) el.classList.toggle("on", false);
-  });
-  const el = $(timelineDays===7?"tlFilter7d":"tlFilter30d");
-  if(el) el.classList.toggle("on", true);
+  const e7 = $("tlFilter7d"); if(e7) e7.classList.toggle("on", days===7);
+  const e30 = $("tlFilter30d"); if(e30) e30.classList.toggle("on", days===30);
   loadTimeline();
+  if(currentStatsSub==="learning") loadLearningRecords();
 }
 
 function renderTimeline(){
@@ -1653,6 +1712,23 @@ function renderTimelineEvent(ev){
       </div>
     </div>`;
   }
+  if(ev.kind === "patrol_session"){
+    const min = ev.valid_minutes||0;
+    const ses = ev.sessions||0;
+    const pts = ev.points_delta ? (ev.points_delta>0?`+${ev.points_delta}`:ev.points_delta) : "";
+    return `<div class="tl-ev" style="border-left-color:var(--blue)">
+      <div class="tl-ev-icon">⏱</div>
+      <div class="tl-ev-body">
+        <div class="tl-ev-title">${esc(ev.title||"学习时段")} <span class="tl-ev-time">${ts}</span></div>
+        <div class="tl-ev-meta">
+          <span style="color:var(--blue)">专注 ${min} 分钟</span>
+          <span style="color:var(--gold)">${ses} 对局</span>
+          ${pts?`<span style="color:${ev.points_delta>0?'var(--gold)':'var(--red)'}">${pts} 积分</span>`:""}
+          ${device?`<span class="dim"> · ${device}</span>`:""}
+        </div>
+      </div>
+    </div>`;
+  }
   return `<div class="tl-ev" style="border-left-color:var(--sub)">
     <div class="tl-ev-icon">📡</div>
     <div class="tl-ev-body">
@@ -1666,10 +1742,11 @@ function onTimelinePush(ev){
   // ev: {kind, data:{...}, created_at, device_name}
   const p = ev.data||{};
   const day = new Date(ev.created_at||Date.now()*1000).toISOString().slice(0,10);
+  const ts = ev.created_at||Math.floor(Date.now()/1000);
   const parsed = {
     id: 'live-'+Date.now(),
     kind: ev.kind,
-    created_at: ev.created_at||Math.floor(Date.now()/1000),
+    created_at: ts,
     device_name: ev.device_name||"",
     task_id: p.task_id||"",
     title: p.title||"",
@@ -1680,10 +1757,29 @@ function onTimelinePush(ev){
     day: day,
   };
   if(timelineKind!=="all" && ev.kind!==timelineKind) return;
-  if(!timelineByDay[day]){ timelineByDay[day]=[]; }
+  if(!timelineByDay[day]){ timelineByDay[day]=[]; timelineDaysList.unshift(day); }
   timelineByDay[day].unshift(parsed);
-  if(!timelineDaysList.includes(day)){ timelineDaysList.unshift(day); }
-  // 更新 totals（简单刷新数字）
+
+  // 【M2.7】mission_result 实时到达时，同时注入一条 patrol_session（供时间线「⏱ 学习」筛选）
+  if(ev.kind==="mission_result" && (timelineKind==="all"||timelineKind==="patrol_session")){
+    const psEntry = {
+      id: 'live-ps-'+Date.now(),
+      kind: "patrol_session",
+      created_at: ts,
+      device_name: ev.device_name||"",
+      task_id: "",
+      title: p.task||p.title||"",
+      state: "",
+      merit_delta: p.merit_delta||0,
+      points_delta: p.points_delta||0,
+      valid_minutes: p.valid_minutes||0,
+      sessions: p.sessions||1,
+      outcome: p.outcome||"",
+      day: day,
+    };
+    timelineByDay[day].unshift(psEntry);
+  }
+
   if($("statsTab").classList.contains("active")) renderTimeline();
 }
 
@@ -1697,6 +1793,131 @@ function openLightbox(evId, title, time){
 function closeLightbox(){
   $("lightbox").classList.remove("active");
   $("lbImg").src = "";
+}
+
+// ── 学习记录视图（M2.7）───────────────────────────────────────
+let currentStatsSub = "battle";
+let currentLearnTask = "";
+
+async function loadLearningRecords(){
+  try {
+    const [psJ, lsJ] = await Promise.all([
+      api("/api/parent/patrol-sessions?since_days=" + timelineDays + (currentLearnTask ? "&task=" + encodeURIComponent(currentLearnTask) : "")),
+      api("/api/parent/learning-stats?days=" + timelineDays)
+    ]);
+    const t = psJ.totals || {};
+    $("learnTotalMinutes").textContent = t.valid_minutes || 0;
+    $("learnTotalSessions").textContent = t.sessions_count || 0;
+    $("learnTotalPoints").textContent = (t.points>0?'+':'') + (t.points||0);
+    $("learnTotalMerit").textContent = (t.merit>0?'+':'') + (t.merit||0);
+    drawLearnChart(lsJ.days || []);
+    renderLearnTaskFilters(psJ.tasks || []);
+    renderLearnSessions(psJ.by_day || {}, psJ.days || []);
+  } catch(e) {
+    console.warn("loadLearningRecords error", e);
+  }
+}
+
+function drawLearnChart(days){
+  const svg = $("learnChart");
+  if(!days || !days.length){ svg.innerHTML=''; return; }
+  const W=280, H=120, PADL=28, PADR=8, PADT=8, PADB=28;
+  const cW=W-PADL-PADR, cH=H-PADT-PADB;
+  const n=days.length;
+  const maxY=Math.max(1,...days.map(d=>d.valid_minutes));
+  const xOf=i=>PADL+i*(cW/Math.max(1,n-1));
+  const yOf=v=>PADT+cH-(v/maxY)*cH;
+  const svgPts=days.map((d,i)=>`${xOf(i)},${yOf(d.valid_minutes)}`).join(' ');
+  const labels=days.map((d,i)=>{
+    const p=d.date.split('-');
+    return `<text x="${xOf(i)}" y="${H-4}" text-anchor="middle" font-size="9" fill="var(--sub)">${p[1]}/${p[2]}</text>`;
+  }).join('');
+  svg.innerHTML=`
+    <polyline points="${svgPts}" fill="none" stroke="var(--gold)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+    ${labels}
+    <text x="${PADL-4}" y="${PADT+4}" text-anchor="end" font-size="9" fill="var(--sub)">${maxY}m</text>
+    <text x="${PADL-4}" y="${H-PADB}" text-anchor="end" font-size="9" fill="var(--sub)">0</text>
+  `;
+}
+
+function renderLearnTaskFilters(tasks){
+  const el=$("learnTaskFilters");
+  if(!tasks.length){ el.innerHTML=''; return; }
+  let html='<button class="on" onclick="filterLearnByTask(\'\')">全部</button>';
+  tasks.forEach(t=>{
+    html+=`<button onclick="filterLearnByTask('${esc(t)}')">${esc(t)}</button>`;
+  });
+  el.innerHTML=html;
+}
+
+async function filterLearnByTask(task){
+  currentLearnTask=task;
+  $("learnTaskFilterLabel").textContent=task||'全部任务';
+  Array.from($("learnTaskFilters").children).forEach(b=>{
+    b.className=b.textContent.trim()===(task||'全部')?'on':'';
+  });
+  const j=await api("/api/parent/patrol-sessions?since_days="+timelineDays+"&task="+encodeURIComponent(task));
+  renderLearnSessions(j.by_day||{}, j.days||[]);
+}
+
+function renderLearnSessions(byDay, days){
+  const el=$("learnSessionList");
+  if(!days || !days.length){
+    el.innerHTML='<div class="dim" style="font-size:13px;padding:12px 0">暂无学习记录</div>';
+    return;
+  }
+  let html='';
+  days.forEach(d=>{
+    const evs=byDay[d]||[];
+    if(!evs.length) return;
+    const dayTot=evs.reduce((a,e)=>({min:a.min+(e.valid_minutes||0),ses:a.ses+(e.sessions||0),pts:a.pts+(e.points_delta||0),merit:a.merit+(e.merit_delta||0)}),{min:0,ses:0,pts:0,merit:0});
+    const label=d.replace(/^20/,'');
+    html+=`<div class="tl-day" style="margin-top:8px">
+      <div class="tl-day-header">
+        <span class="tl-day-label">${label}</span>
+        <div class="tl-day-summary">
+          <span style="color:var(--blue)">⏱${dayTot.min}m</span>
+          <span style="color:var(--gold)">🎯${dayTot.ses}局</span>
+          <span>${evs.length}时段</span>
+        </div>
+      </div>
+      <div class="tl-day-events">`;
+    evs.forEach(ev=>{
+      const st=ev.started_at ? new Date(ev.started_at*1000).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : '';
+      const en=ev.ended_at ? new Date(ev.ended_at*1000).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : '';
+      const pts=ev.points_delta?(ev.points_delta>0?`+${ev.points_delta}`:ev.points_delta):'';
+      const outcomeBadge=ev.outcome==='INTERRUPTED'?'<span class="chip" style="color:var(--red);font-size:10px">中断</span>':
+                         ev.outcome==='SETTLED'?'<span class="chip" style="color:var(--light);font-size:10px">收工</span>':'';
+      html+=`<div class="tl-ev" style="border-left-color:var(--blue)">
+        <div class="tl-ev-icon">⏱</div>
+        <div class="tl-ev-body">
+          <div class="tl-ev-title">
+            ${esc(ev.task_name||'学习时段')}
+            <span class="tl-ev-time">${st}${en?' → '+en:''}</span>
+          </div>
+          <div class="tl-ev-meta">
+            <span>专注 ${ev.valid_minutes||0} 分钟</span>
+            <span>🎯 ${ev.sessions||0} 对局</span>
+            ${pts?`<span style="color:${ev.points_delta>0?'var(--gold)':'var(--red)'}">${pts} 积分</span>`:''}
+            ${ev.merit_delta?`<span>${ev.merit_delta>0?'+':''}${ev.merit_delta} 功绩</span>`:''}
+            ${outcomeBadge}
+            ${ev.device_name?`<span class="dim">${esc(ev.device_name)}</span>`:''}
+          </div>
+        </div>
+      </div>`;
+    });
+    html+='</div></div>';
+  });
+  el.innerHTML=html;
+}
+
+function switchStatsSub(sub){
+  currentStatsSub=sub;
+  $("statsBattleView").style.display=sub==='battle'?'':'none';
+  $("statsLearningView").style.display=sub==='learning'?'':'none';
+  $("statsSubBtnBattle").className=sub==='battle'?'on':'';
+  $("statsSubBtnLearning").className=sub==='learning'?'on':'';
+  if(sub==='learning') loadLearningRecords();
 }
 
 // ── 作战指挥台（战绩统计） ─────────────────────────────────────

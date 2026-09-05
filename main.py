@@ -427,6 +427,18 @@ def history_events(
         sql += " ORDER BY created_at DESC LIMIT 500"
         rows = conn.execute(sql, args).fetchall()
 
+        # 【M2.7】同时合并 patrol_session 表（学习时段按 kind=patrol_session 暴露）
+        if (not kind) or kind == "patrol_session":
+            ps_sql = "SELECT * FROM patrol_session WHERE family_id=? AND started_at>=?"
+            if kind == "patrol_session":
+                ps_sql += " ORDER BY started_at DESC LIMIT 500"
+                ps_rows = conn.execute(ps_sql, (fam["id"], since_ts)).fetchall()
+            else:
+                ps_rows = conn.execute(ps_sql + " ORDER BY started_at DESC LIMIT 500",
+                                       (fam["id"], since_ts)).fetchall()
+        else:
+            ps_rows = []
+
         from collections import defaultdict
         by_day = defaultdict(list)
         for r in rows:
@@ -450,6 +462,25 @@ def history_events(
             }
             day = time.strftime("%Y-%m-%d", time.localtime(r["created_at"]))
             by_day[day].append(ev)
+        # patrol_session → 转为历史事件
+        for r in ps_rows:
+            ev = {
+                "id": r["_id"],
+                "kind": "patrol_session",
+                "created_at": r["started_at"] * 1000,
+                "device_name": r.get("device_name",""),
+                "task_id": "",
+                "title": r.get("task_name",""),
+                "state": "",
+                "merit_delta": r["merit_delta"],
+                "points_delta": r["points_delta"],
+                "evidence": False,
+                "valid_minutes": r["valid_minutes"],
+                "sessions": r["sessions"],
+                "outcome": r.get("outcome",""),
+            }
+            day = time.strftime("%Y-%m-%d", time.localtime(r["started_at"]))
+            by_day[day].append(ev)
 
         summaries = {}
         for day, evs in by_day.items():
@@ -463,7 +494,7 @@ def history_events(
             "days": list(reversed(sorted(by_day.keys()))),
             "by_day": {k: by_day[k] for k in sorted(by_day)},
             "summaries": summaries,
-            "total": len(rows),
+            "total": len(rows) + len(ps_rows),
         }
 
 
