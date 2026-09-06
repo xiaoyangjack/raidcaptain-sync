@@ -126,12 +126,19 @@ async def lifespan(app: FastAPI):
         logger.info("   • %s v%s - %s (%d routes)",
                     s["id"], s["version"], s["name"], s["routers"])
 
-    # 4. 静态资源（家长网页） - 在 lifespan 中挂载，保证 API 路由优先匹配
+    # 4. 静态资源（家长网页）
+    # 关键：StaticFiles 必须挂在子路径上，避免 catch-all 拦截 /api/*
     from fastapi.staticfiles import StaticFiles
     STATIC_DIR = Path(__file__).resolve().parent.parent.parent / "static"
     if STATIC_DIR.exists():
-        app.mount("/", StaticFiles(directory=str(STATIC_DIR), html=True), name="parent")
-        logger.info("✅ 家长网页已挂载: / -> %s", STATIC_DIR)
+        # 挂载到 /static（避免拦截 /api/* 路由）
+        app.mount("/static", StaticFiles(directory=str(STATIC_DIR), html=True), name="parent-static")
+        # 同时把 / 显式重定向到 /parent.html（保持兼容性）
+        @app.get("/")
+        async def index():
+            from fastapi.responses import FileResponse
+            return FileResponse(STATIC_DIR / "parent.html")
+        logger.info("✅ 静态资源已挂载: /static + / → parent.html (%s)", STATIC_DIR)
 
     # 5. OSS 状态
     from raidcaptain_sync.services.oss_storage import oss_storage
