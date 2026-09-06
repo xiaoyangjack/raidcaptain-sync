@@ -1,0 +1,25 @@
+# 排除干扰文件
+.git
+.gitignore
+README.md
+.env
+*.md
+*.pyc
+__pycache__
+.venv
+venv
+*.log
+.DS_Store
+Thumbs.db
+node_modules
+
+# 明确包含需要的文件
+!src/**
+!static/**
+!requirements.txt
+!railway.json
+
+# Railway build context 是仓库根目录
+# Dockerfile 在根目录，COPY 路径为：
+#   COPY src/ /app/src/
+#   COPY static/ /app/static/
