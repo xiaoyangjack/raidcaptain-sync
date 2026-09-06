@@ -41,7 +41,15 @@ async def device_push_events(
         if not kind:
             raise HTTPException(400, "事件缺少 kind")
         payload = e.get("data")
-        created = int(e.get("created_at") or now * 1000)
+        # Android 端上报的是毫秒时间戳；自动检测并转成秒
+        raw = e.get("created_at")
+        if raw:
+            ts = int(raw)
+            # 2024 年后秒级时间戳约 1.7e9，毫秒级约 1.7e12
+            created = ts // 1000 if ts > 100_000_000_000 else ts
+        else:
+            created = now
+            created //= 1000
 
         db.execute(
             "INSERT INTO event(family_id, device_name, kind, payload, created_at) "
