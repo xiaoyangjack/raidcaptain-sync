@@ -127,20 +127,34 @@ async def lifespan(app: FastAPI):
                     s["id"], s["version"], s["name"], s["routers"])
 
     # 4. 静态资源（家长网页）
-    # 关键：StaticFiles 必须挂在子路径上，避免 catch-all 拦截 /api/*
+    # 多路径查找：兼容本地 / 容器 / Railway Nixpacks
     from fastapi.staticfiles import StaticFiles
-    STATIC_DIR = Path(__file__).resolve().parent.parent.parent / "static"
-    if STATIC_DIR.exists():
-        # 挂载到 /static（避免拦截 /api/* 路由）
+    from fastapi.responses import FileResponse
+    SEARCH_PATHS = [
+        Path("/app/static"),  # Railway Dockerfile 路径
+        Path("/app/src/static"),  # Railway Nixpacks
+        Path(__file__).resolve().parent.parent.parent / "static",  # 本地开发（/app/src/raidcaptain_sync/main.py -> /app/src/static）
+        Path(__file__).resolve().parent.parent / "static",  # 本地开发 alt
+    ]
+    STATIC_DIR = None
+    for path in SEARCH_PATHS:
+        if path.exists() and (path / "parent.html").exists():
+            STATIC_DIR = path
+            break
+
+    if STATIC_DIR:
         app.mount("/static", StaticFiles(directory=str(STATIC_DIR), html=True), name="parent-static")
-        # 同时把 / 显式重定向到 /parent.html（保持兼容性）
+
         @app.get("/")
         async def index():
-            from fastapi.responses import FileResponse
             return FileResponse(STATIC_DIR / "parent.html")
-        logger.info("✅ 静态资源已挂载: /static + / → parent.html (%s)", STATIC_DIR)
-
-    # 5. OSS 状态
+        logger.info("✅ 静态资源已挂载: /static + / → %s/parent.html", STATIC_DIR)
+    else:
+        logger.warning("⚠️  parent.html 未找到，以下路径均不存在:")
+        for path in SEARCH_PATHS:
+            exists = path.exists()
+            parent_exists = (path / "parent.html").exists() if exists else False
+            logger.warning("     %s | exists=%s | parent.html=%s", path, exists, parent_exists)
     from raidcaptain_sync.services.oss_storage import oss_storage
     if oss_storage._enabled:
         logger.info("✅ OSS 存储已启用 (bucket=%s)", settings.oss_bucket)
