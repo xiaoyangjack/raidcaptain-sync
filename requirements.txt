@@ -7,3 +7,6 @@ oss2>=2.18.0
 python-multipart>=0.0.9
 slowapi>=0.1.9
 loguru>=0.7.0
+
+# 部署触发：本地缓存时强制重建
+# Build trigger: 2026-09-06T18:48:00Z
