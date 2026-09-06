@@ -50,6 +50,13 @@ def history_events(
     ps_rows = db.execute(ps_sql + " ORDER BY started_at DESC LIMIT 500",
                          (fam["id"], since_ts)).fetchall()
 
+    def safe_get(row, key, default=""):
+        """sqlite3.Row 没有 .get() 方法。"""
+        try:
+            return row[key] if key in row.keys() else default
+        except (KeyError, IndexError):
+            return default
+
     by_day = defaultdict(list)
     for r in rows:
         p = {}
@@ -59,7 +66,7 @@ def history_events(
             pass
         ev = {
             "id": r["_id"], "kind": r["kind"], "created_at": r["created_at"],
-            "device_name": r.get("device_name", ""),
+            "device_name": safe_get(r, "device_name", ""),
             "task_id": p.get("task_id", ""),
             "title": p.get("title", ""),
             "state": p.get("state", ""),
@@ -77,14 +84,14 @@ def history_events(
         ev = {
             "id": r["_id"], "kind": "patrol_session",
             "created_at": r["started_at"] * 1000,
-            "device_name": r.get("device_name", ""),
-            "task_id": "", "title": r.get("task_name", ""),
+            "device_name": safe_get(r, "device_name", ""),
+            "task_id": "", "title": safe_get(r, "task_name", ""),
             "state": "", "merit_delta": r["merit_delta"],
             "points_delta": r["points_delta"],
             "evidence": False,
             "valid_minutes": r["valid_minutes"],
             "sessions": r["sessions"],
-            "outcome": r.get("outcome", ""),
+            "outcome": safe_get(r, "outcome", ""),
         }
         day = time.strftime("%Y-%m-%d", time.localtime(r["started_at"]))
         by_day[day].append(ev)
