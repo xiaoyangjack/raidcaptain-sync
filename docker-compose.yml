@@ -1,0 +1,42 @@
+# RaidCaptain Sync Server - Docker Compose 本地开发用
+# 生产环境建议直接用阿里云/腾讯云 ECS + Docker 命令行部署
+
+services:
+  app:
+    build: .
+    container_name: raidcaptain-sync
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      - sync_data:/data  # SQLite + WAL 持久化
+    environment:
+      # ── 数据库 ──────────────────────────────────────────
+      RAID_SYNC_DIR: /data
+      RAID_SYNC_DB: /data/sync.db
+      # ── OSS（按需填写，注释掉即降级为 base64）────────────
+      # RAID_OSS_ENDPOINT: https://oss-cn-hangzhou.aliyuncs.com
+      # RAID_OSS_BUCKET: raidcaptain-evidence
+      # RAID_OSS_ACCESS_KEY_ID: <your_key>
+      # RAID_OSS_ACCESS_KEY_SECRET: <your_secret>
+      # RAID_OSS_REGION: cn-hangzhou
+      # ── 服务器 ──────────────────────────────────────────
+      RAID_HOST: 0.0.0.0
+      RAID_PORT: 8000
+      RAID_LOG_LEVEL: INFO
+
+  # 反向代理（生产环境推荐，可选）
+  # nginx:
+  #   image: nginx:alpine
+  #   ports:
+  #     - "80:80"
+  #     - "443:443"
+  #   volumes:
+  #     - ./nginx.conf:/etc/nginx/nginx.conf:ro
+  #     - ./certs:/etc/nginx/certs:ro
+  #   depends_on:
+  #     - app
+
+volumes:
+  sync_data:
+    name: raidcaptain_sync_data

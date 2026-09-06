@@ -1,0 +1,33 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+.venv/
+venv/
+env/
+
+# 运行时
+/data/
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.log
+
+# 配置 / 凭据
+.env
+.env.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# 备份 / 测试
+*.bak
+*.tmp
+.coverage
+.pytest_cache/

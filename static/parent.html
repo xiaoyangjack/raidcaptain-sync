@@ -370,10 +370,29 @@
 
 <!-- ════ 已登录 ════ -->
 <div id="mainView" style="display:none">
-  <div class="stats" id="stats">
-    <div class="stat ok"><div class="v" id="statActive">-</div><div class="l">今日军令</div></div>
-    <div class="stat warn"><div class="v" id="statPending">-</div><div class="l">待处理申诉</div></div>
+  <!-- 顶部 5 块核心数据（Phase 6：经济双轨 + 军衔 + 任务 + 申诉 + 设备） -->
+  <div class="stats" id="stats" style="grid-template-columns:repeat(5, 1fr)">
+    <div class="stat ok" title="锐察功绩 = 商城兑换 + 消费（不能用于军衔）">
+      <div class="v" id="statMerit">-</div>
+      <div class="l">🎖️ 锐察功绩</div>
+    </div>
+    <div class="stat warn" title="纲纪指数 = 军衔晋升依据（不能消费）">
+      <div class="v" id="statDiscipline">-</div>
+      <div class="l">🏛️ 纲纪指数</div>
+    </div>
+    <div class="stat"><div class="v" id="statActive">-</div><div class="l">今日军令</div></div>
+    <div class="stat bad"><div class="v" id="statPending">-</div><div class="l">待处理申诉</div></div>
     <div class="stat"><div class="v" id="statDone">-</div><div class="l">设备状态</div></div>
+  </div>
+  <div class="stats" id="rankStats" style="grid-template-columns:repeat(2, 1fr); margin-top:4px">
+    <div class="stat" style="border-color:var(--gold)">
+      <div class="v" id="statRankName" style="font-size:16px">-</div>
+      <div class="l">🎖️ 当前军衔</div>
+    </div>
+    <div class="stat" style="border-color:var(--light)">
+      <div class="v" id="statRankProgress" style="font-size:13px">-</div>
+      <div class="l">📈 距离下一级</div>
+    </div>
   </div>
 
   <!-- Tab 1: 今日 -->
@@ -397,7 +416,25 @@
     </div>
   </div>
 
-  <!-- Tab 3: 申诉 -->
+  <!-- Tab 3: 军需处（Phase 6：4 大分类 + 锐察功绩消费） -->
+  <div id="rewardTab" class="tab">
+    <div class="card">
+      <div class="card-title">🛒 军需补给处
+        <span class="sp"></span>
+        <span class="dim" style="font-size:11px">锐察功绩消费（不能用于军衔）</span>
+      </div>
+      <div class="filter-bar" id="rewardCategories">
+        <button class="on" data-cat="all" onclick="filterRewards('all')">全部</button>
+        <button data-cat="game_time" onclick="filterRewards('game_time')">🎮 游戏时间</button>
+        <button data-cat="entertainment" onclick="filterRewards('entertainment')">🍿 娱乐特权</button>
+        <button data-cat="physical" onclick="filterRewards('physical')">🎁 实物奖励</button>
+        <button data-cat="privilege" onclick="filterRewards('privilege')">⭐ 荣誉特权</button>
+      </div>
+      <div id="rewardList"></div>
+    </div>
+  </div>
+
+  <!-- Tab 4: 申诉 -->
   <div id="appealTab" class="tab">
     <div class="card">
       <div class="card-title">⚖️ 申诉审核<span class="sp"></span></div>
@@ -531,6 +568,7 @@
       <div class="card-title">⚙️ 数据管理<span class="sp"></span></div>
       <div class="dim" style="margin-bottom:10px">当前数据概况（已联网持久化到 Railway 持久卷）</div>
       <div id="adminSummary" style="display:grid; grid-template-columns:repeat(2,1fr); gap:6px; margin-bottom:14px"></div>
+      <div id="spaceUsage" style="margin-bottom:14px"></div>
 
       <div class="card-title" style="font-size:14px">🧹 按类型清空</div>
       <div class="dim" style="margin-bottom:8px; font-size:11px">清理后无法恢复，谨慎操作</div>
@@ -616,7 +654,7 @@
 <div class="navbar" id="navbar">
   <button id="navTask" class="on" onclick="switchTab('task')">📋 今日</button>
   <button id="navTmpl" onclick="switchTab('tmpl')">📚 模板</button>
-  <button id="navAppeal" onclick="switchTab('appeal')">⚖️ 申诉<span class="badge" id="appealBadge" style="display:none">0</span></button>
+  <button id="navReward" onclick="switchTab('reward')">🛒 军需处</button>
   <button id="navStats" onclick="switchTab('stats')">📡 作战</button>
   <button id="navAdmin" onclick="switchTab('admin')">⚙️ 设置</button>
 </div>
@@ -921,15 +959,18 @@ function switchTab(t){
   document.querySelectorAll(".navbar button").forEach(el => el.className = "");
   $("taskTab").classList.toggle("active", t==="task");
   $("tmplTab").classList.toggle("active", t==="tmpl");
+  $("rewardTab").classList.toggle("active", t==="reward");
   $("appealTab").classList.toggle("active", t==="appeal");
   $("statsTab").classList.toggle("active", t==="stats");
   $("adminTab").classList.toggle("active", t==="admin");
   $("navTask").className = t==="task" ? "on" : "";
   $("navTmpl").className = t==="tmpl" ? "on" : "";
   $("navAppeal").className = t==="appeal" ? "on" : "";
+  $("navReward").className = t==="reward" ? "on" : "";
   $("navStats").className = t==="stats" ? "on" : "";
   $("navAdmin").className = t==="admin" ? "on" : "";
   if(t==="tmpl") loadTemplates();
+  if(t==="reward") loadRewards();
   if(t==="appeal") loadAppeals("PENDING");
   if(t==="stats") loadStats();
   if(t==="admin") loadAdmin();
@@ -938,7 +979,31 @@ function switchTab(t){
 }
 
 async function refreshAll(){
-  await Promise.all([loadTasks(), loadTemplates(), refreshStatus()]);
+  await Promise.all([loadTasks(), loadTemplates(), refreshStatus(), loadBalanceAndRank()]);
+}
+
+// Phase 6：加载锐察功绩 / 纲纪指数 / 当前军衔
+async function loadBalanceAndRank(){
+  try{
+    const b = await api("/api/parent/balance");
+    $("statMerit").textContent = b.merit;
+    $("statDiscipline").textContent = b.discipline;
+  }catch(e){
+    $("statMerit").textContent = "?";
+    $("statDiscipline").textContent = "?";
+  }
+  try{
+    const r = await api("/api/parent/ranks/progress");
+    $("statRankName").textContent = r.current_rank_name || "无";
+    if(r.next_rank_name){
+      $("statRankProgress").textContent = `${r.current_progress}/${r.next_required} (${r.progress_percent?.toFixed(0) || 0}%)`;
+    } else {
+      $("statRankProgress").textContent = "最高军衔";
+    }
+  }catch(e){
+    $("statRankName").textContent = "?";
+    $("statRankProgress").textContent = "?";
+  }
 }
 
 // ============================================================
@@ -1339,6 +1404,43 @@ async function loadTemplates(){
     templates = j.templates || [];
     renderTemplates();
   }catch(e){ toast(e.message); }
+}
+
+// Phase 6：军需处（4 大分类 + 锐察功绩消费）
+let allRewards = [];
+let currentRewardCat = "all";
+async function loadRewards(){
+  try{
+    const j = await api("/api/parent/rewards/items");
+    allRewards = j.items || [];
+    renderRewards();
+  }catch(e){ toast(e.message); }
+}
+function filterRewards(cat){
+  currentRewardCat = cat;
+  document.querySelectorAll("#rewardCategories button").forEach(b => {
+    b.classList.toggle("on", b.dataset.cat === cat);
+  });
+  renderRewards();
+}
+function renderRewards(){
+  const list = currentRewardCat === "all" ? allRewards : allRewards.filter(it => (it.tags || []).includes(currentRewardCat));
+  if(!list.length){
+    $("rewardList").innerHTML = '<div class="empty"><div class="icon">🛒</div><div>该分类暂无商品</div><div class="dim" style="margin-top:4px">先到 <code>/api/admin/seed-rewards</code> 播撒 4 大分类默认数据</div></div>';
+    return;
+  }
+  $("rewardList").innerHTML = list.map(it => {
+    const cat = (it.tags||[])[0] || "general";
+    const catName = {game_time:"🎮 游戏", entertainment:"🍿 娱乐", physical:"🎁 实物", privilege:"⭐ 荣誉"}[cat] || cat;
+    return `<div class="tmpl">
+      <div class="tname">${esc(it.name || it.item_id)}</div>
+      <div class="tmeta">
+        <span class="chip">${catName}</span>
+        <span style="color:var(--gold);font-weight:700">🎖️ ${it.price_amount} 功绩</span>
+        ${it.description ? ` · ${esc(it.description)}` : ""}
+      </div>
+    </div>`;
+  }).join("");
 }
 
 let editingTmplId = null;
@@ -1991,10 +2093,35 @@ async function loadAdmin(){
     $("photoCountChip").textContent = `${j.photo_count} 张`;
     $("appealCountChip").textContent = `${j.appeal_count} 条`;
     $("tmplCountChip").textContent = `${j.template_count} 个`;
+    loadSpaceUsage();
   }catch(e){
     toast(detectError(e).msg, "error");
   }
 }
+
+
+
+// Phase 6：数据库空间占用（接入 /api/admin/space-usage）
+async function loadSpaceUsage(){
+  try {
+    const s = await api("/api/admin/space-usage");
+    const fmt = v => v >= 1024 ? (v/1024).toFixed(1)+" MB" : v+" KB";
+    const tableList = s.tables.map(t => t.table+": "+t.rows+"行").join(" · ");
+    $("spaceUsage").innerHTML = '<div class="card" style="border-color:var(--gold)">' +
+      '<div class="card-title" style="color:var(--gold)">💾 数据库空间</div>' +
+      '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;text-align:center;margin-bottom:6px">' +
+        '<div><div style="font-size:20px;font-weight:700;color:var(--light)">'+fmt(s.db_size_kb)+'</div><div class="dim">DB 文件</div></div>' +
+        '<div><div style="font-size:20px;font-weight:700">'+s.total_rows+'</div><div class="dim">总行数</div></div>' +
+        '<div><div style="font-size:20px;font-weight:700">'+s.tables.length+'</div><div class="dim">数据表</div></div>' +
+      '</div>' +
+      '<div class="dim" style="font-size:11px">'+tableList+'</div>' +
+    '</div>';
+  } catch(e) {
+    $("spaceUsage").innerHTML = '';
+  }
+}
+
+
 
 function openClearModal(type, title, body){
   _clearTarget = type;
