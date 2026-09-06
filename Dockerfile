@@ -27,9 +27,8 @@ ENV PYTHONPATH=/app \
     RAID_SYNC_DIR=/data \
     RAID_SYNC_DB=/data/sync.db \
     HOST=0.0.0.0 \
-    PORT=8000 \
     PYTHONUNBUFFERED=1
 
 EXPOSE 8000
 
-CMD ["uvicorn", "raidcaptain_sync.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["sh", "-c", "uvicorn raidcaptain_sync.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
