@@ -32,11 +32,11 @@ from raidcaptain_sync.services.economy import CurrencyKind
 # ── 依赖 ────────────────────────────────────────────────────────
 
 def auth_admin(
-    authorization: Annotated[str, Header(...)],
+    authorization: Annotated[str | None, Header()] = None,
     db: sqlite3.Connection = Depends(get_db),
 ) -> dict:
     """验证并返回 admin 信息。"""
-    if not authorization.startswith("Bearer "):
+    if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(401, "缺少 Authorization header")
     token = authorization[7:]
     info = AdminAuthService.verify_token(token)
@@ -60,7 +60,7 @@ def require_role(*roles: str):
     from raidcaptain_sync.services.admin_auth import AdminAuthService
 
     def dep(
-        authorization: Annotated[str, Header(...)],
+        authorization: Annotated[str | None, Header()] = None,
         db: sqlite3.Connection = Depends(get_db),
     ) -> dict:
         admin = auth_admin(authorization, db)
@@ -223,7 +223,11 @@ class AdminModule:
         @router.post("/login", summary="管理员登录")
         def login(body: LoginRequest, db: sqlite3.Connection = Depends(_gdb)):
             auth = AdminAuthService(db)
-            token, info, expires = auth.login(body.username, body.password)
+            try:
+                token, info, expires = auth.login(body.username, body.password)
+            except ValueError as e:
+                # 用户名/密码错误、账户停用等业务失败 → 401，不暴露内部异常
+                raise HTTPException(status_code=401, detail=str(e))
             return {"admin_token": token, "expires_at": expires, **info}
 
         @router.get("/me", summary="当前管理员信息", response_model=AdminMe)

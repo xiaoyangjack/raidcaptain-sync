@@ -155,6 +155,26 @@ async def lifespan(app: FastAPI):
             exists = path.exists()
             parent_exists = (path / "parent.html").exists() if exists else False
             logger.warning("     %s | exists=%s | parent.html=%s", path, exists, parent_exists)
+
+    # 4.1 管理后台 SPA（admin-frontend 构建产物，挂在 /admin/ 下）
+    ADMIN_SEARCH_PATHS = [
+        Path("/app/static/admin"),                      # Railway Dockerfile 路径
+        Path(__file__).resolve().parent.parent.parent / "static" / "admin",  # 本地开发
+    ]
+    ADMIN_DIR = next((p for p in ADMIN_SEARCH_PATHS if p.exists() and (p / "index.html").exists()), None)
+    if ADMIN_DIR:
+        app.mount("/admin/assets", StaticFiles(directory=str(ADMIN_DIR / "assets")), name="admin-assets")
+
+        @app.get("/admin/{full_path:path}", include_in_schema=False)
+        async def admin_spa(full_path: str):
+            """SPA fallback：静态文件直接返回，其余一律回 index.html 交给前端路由。"""
+            candidate = (ADMIN_DIR / full_path).resolve()
+            if full_path and candidate.is_file() and candidate.is_relative_to(ADMIN_DIR.resolve()):
+                return FileResponse(candidate)
+            return FileResponse(ADMIN_DIR / "index.html")
+        logger.info("✅ 管理后台已挂载: /admin/ → %s", ADMIN_DIR)
+    else:
+        logger.warning("⚠️  admin SPA 未找到（/app/static/admin/index.html），跳过 /admin/ 挂载")
     from raidcaptain_sync.services.oss_storage import oss_storage
     if oss_storage._enabled:
         logger.info("✅ OSS 存储已启用 (bucket=%s)", settings.oss_bucket)

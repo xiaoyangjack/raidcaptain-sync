@@ -2,6 +2,8 @@
 数据库初始化 - RaidCaptain Sync Server v3.1
 启动时确保表/索引存在。与 M2.5 原 schema 完全兼容 + 新增模块化表。
 """
+import os
+
 from raidcaptain_sync.config import settings
 
 
@@ -337,6 +339,38 @@ def init_db() -> None:
                 conn.execute(sql)
             except Exception:
                 pass
+        # v3.3 seed：确保存在默认管理员账户（云端部署无法跑 CLI 时的兜底）。
+        # 密码可用环境变量 RAID_ADMIN_INIT_PASSWORD 覆盖；仅在 admin 表为空时创建。
+        _seed_default_admin(conn)
         conn.commit()
     finally:
         conn.close()
+
+
+def _seed_default_admin(conn) -> None:
+    """admin 表为空时创建初始管理员（username=admin）。"""
+    import logging
+    import secrets as _secrets
+    import time as _time
+
+    try:
+        n = conn.execute("SELECT COUNT(*) FROM admin").fetchone()[0]
+        if n:
+            return
+        from raidcaptain_sync.services.admin_auth import (
+            hash_admin_pw, make_admin_salt,
+        )
+        password = os.environ.get("RAID_ADMIN_INIT_PASSWORD") or "admin123"
+        salt = make_admin_salt()
+        conn.execute(
+            """INSERT INTO admin(admin_id, username, pw_salt, pw_hash, role,
+                is_active, created_at)
+               VALUES (?, ?, ?, ?, 'admin', 1, ?)""",
+            (_secrets.token_hex(8), "admin", salt,
+             hash_admin_pw(password, salt), int(_time.time() * 1000)),
+        )
+        logging.getLogger(__name__).info(
+            "✅ 已创建默认管理员 admin（密码来自 RAID_ADMIN_INIT_PASSWORD 或默认值，请尽快修改）"
+        )
+    except Exception as e:  # 不阻断启动
+        logging.getLogger(__name__).warning("默认管理员创建失败: %s", e)
