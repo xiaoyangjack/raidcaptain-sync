@@ -43,6 +43,9 @@ def history_events(
     if kind:
         sql += " AND kind=?"
         args.append(kind)
+    else:
+        # 默认包含所有任务相关事件类型
+        sql += " AND kind IN ('task_completion','task_state_update','mission_result','appeal_submitted')"
     sql += " ORDER BY created_at DESC LIMIT 500"
     rows = db.execute(sql, args).fetchall()
 
@@ -98,12 +101,13 @@ def history_events(
 
     summaries = {}
     for day, evs in by_day.items():
-        done = sum(1 for e in evs if e["kind"] == "task_completion" and e["state"] == "DONE")
-        overdue = sum(1 for e in evs if e["kind"] == "task_completion" and e["state"] == "OVERDUE")
+        done = sum(1 for e in evs if (e["kind"] == "task_completion" or e["kind"] == "task_state_update") and e["state"] == "DONE")
+        overdue = sum(1 for e in evs if (e["kind"] == "task_completion" or e["kind"] == "task_state_update") and e["state"] == "OVERDUE")
+        in_progress = sum(1 for e in evs if (e["kind"] == "task_completion" or e["kind"] == "task_state_update") and e["state"] == "IN_PROGRESS")
         merit = sum(e["merit_delta"] for e in evs)
         points = sum(e["points_delta"] for e in evs)
         summaries[day] = {
-            "done": done, "overdue": overdue,
+            "done": done, "overdue": overdue, "in_progress": in_progress,
             "merit": merit, "points": points, "total": len(evs)
         }
 
@@ -222,16 +226,16 @@ def parent_stats(
     start = int(datetime.datetime(today.year, today.month, today.day).timestamp() * 1000) - (days - 1) * 86_400_000
     events = db.execute(
         """SELECT _id, kind, payload, created_at FROM event
-           WHERE family_id=? AND kind='task_completion' AND created_at>=?
+           WHERE family_id=? AND kind IN ('task_completion','task_state_update') AND created_at>=?
            ORDER BY _id ASC""",
         (fam["id"], start)).fetchall()
 
     by_day = {}
     for i in range(days):
         d = (today - datetime.timedelta(days=days - 1 - i)).isoformat()
-        by_day[d] = {"date": d, "done": 0, "overdue": 0}
+        by_day[d] = {"date": d, "done": 0, "overdue": 0, "in_progress": 0}
 
-    total_done = total_overdue = 0
+    total_done = total_overdue = total_in_progress = 0
     for r in events:
         p = {}
         try:
@@ -243,12 +247,16 @@ def parent_stats(
             ts / 1000, tz=datetime.timezone.utc
         ).astimezone().date().isoformat()
         if d in by_day:
-            if p.get("state") == "DONE":
+            state = p.get("state", "")
+            if state == "DONE":
                 by_day[d]["done"] += 1
                 total_done += 1
-            else:
+            elif state == "OVERDUE":
                 by_day[d]["overdue"] += 1
                 total_overdue += 1
+            elif state == "IN_PROGRESS":
+                by_day[d]["in_progress"] += 1
+                total_in_progress += 1
 
     mission_events = db.execute(
         """SELECT payload FROM event
@@ -264,11 +272,11 @@ def parent_stats(
         total_merit += int(p.get("meritDelta", p.get("merit_delta", 0)) or 0)
         total_points += int(p.get("pointsDelta", p.get("points_delta", 0)) or 0)
 
-    completion_rate = round(total_done / max(1, total_done + total_overdue) * 100, 1)
+    completion_rate = round(total_done / max(1, total_done + total_overdue + total_in_progress) * 100, 1)
     return {
         "days": list(by_day.values()),
         "totals": {
-            "done": total_done, "overdue": total_overdue,
+            "done": total_done, "overdue": total_overdue, "in_progress": total_in_progress,
             "completion_rate": completion_rate,
             "merit": total_merit, "points": total_points,
         },

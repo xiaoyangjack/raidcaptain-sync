@@ -34,10 +34,24 @@ CREATE TABLE IF NOT EXISTS task(
     points_reward INTEGER NOT NULL DEFAULT 0, points_penalty INTEGER NOT NULL DEFAULT 0,
     require_evidence INTEGER NOT NULL DEFAULT 0,
     active INTEGER NOT NULL DEFAULT 1, updated_at INTEGER NOT NULL,
+    -- 计时模式下发（v11: 任务计时+场景模板）
+    mode_id TEXT NOT NULL DEFAULT 'builtin:writing',
+    duration_min INTEGER NOT NULL DEFAULT 30,
+    timing_mode TEXT NOT NULL DEFAULT 'countdown',
     PRIMARY KEY(family_id, task_id)
 );
 CREATE TABLE IF NOT EXISTS task_revision(
     family_id TEXT PRIMARY KEY, rev INTEGER NOT NULL DEFAULT 1
+);
+CREATE TABLE IF NOT EXISTS task_audit(
+    _id INTEGER PRIMARY KEY AUTOINCREMENT,
+    family_id TEXT NOT NULL,
+    task_id TEXT NOT NULL,
+    action TEXT NOT NULL,        -- created / updated / disabled
+    actor TEXT NOT NULL,         -- parent username / system
+    before_json TEXT NOT NULL DEFAULT '{}',
+    after_json TEXT NOT NULL DEFAULT '{}',
+    created_at INTEGER NOT NULL
 );
 CREATE TABLE IF NOT EXISTS event(
     _id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -56,6 +70,10 @@ CREATE TABLE IF NOT EXISTS template(
     points_reward INTEGER NOT NULL DEFAULT 0, points_penalty INTEGER NOT NULL DEFAULT 0,
     require_evidence INTEGER NOT NULL DEFAULT 0,
     created_at INTEGER NOT NULL,
+    -- 计时模式（v11）
+    mode_id TEXT NOT NULL DEFAULT 'builtin:writing',
+    duration_min INTEGER NOT NULL DEFAULT 30,
+    timing_mode TEXT NOT NULL DEFAULT 'countdown',
     UNIQUE(family_id, template_id)
 );
 CREATE TABLE IF NOT EXISTS appeal(
@@ -252,6 +270,10 @@ CREATE INDEX IF NOT EXISTS idx_event_family_kind
     ON event(family_id, kind);
 CREATE INDEX IF NOT EXISTS idx_task_family_active
     ON task(family_id, active);
+CREATE INDEX IF NOT EXISTS idx_task_audit_family
+    ON task_audit(family_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_task_audit_task
+    ON task_audit(task_id);
 CREATE INDEX IF NOT EXISTS idx_evidence_family_created
     ON evidence_file(family_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_evidence_task
@@ -339,7 +361,21 @@ def init_db() -> None:
                 conn.execute(sql)
             except Exception:
                 pass
-        # v3.3 seed：确保存在默认管理员账户（云端部署无法跑 CLI 时的兜底）。
+        # v3.4 迁移：任务计时模式 + 场景模板（幂等 ALTER，新库 CREATE 已包含列）
+        _TASK_MODE_MIGRATIONS = [
+            "ALTER TABLE task ADD COLUMN mode_id TEXT NOT NULL DEFAULT 'builtin:writing'",
+            "ALTER TABLE task ADD COLUMN duration_min INTEGER NOT NULL DEFAULT 30",
+            "ALTER TABLE task ADD COLUMN timing_mode TEXT NOT NULL DEFAULT 'countdown'",
+            "ALTER TABLE template ADD COLUMN mode_id TEXT NOT NULL DEFAULT 'builtin:writing'",
+            "ALTER TABLE template ADD COLUMN duration_min INTEGER NOT NULL DEFAULT 30",
+            "ALTER TABLE template ADD COLUMN timing_mode TEXT NOT NULL DEFAULT 'countdown'",
+        ]
+        for sql in _TASK_MODE_MIGRATIONS:
+            try:
+                conn.execute(sql)
+            except Exception:
+                pass
+        # v3.4 seed：确保存在默认管理员账户（云端部署无法跑 CLI 时的兜底）。
         # 密码可用环境变量 RAID_ADMIN_INIT_PASSWORD 覆盖；仅在 admin 表为空时创建。
         _seed_default_admin(conn)
         conn.commit()

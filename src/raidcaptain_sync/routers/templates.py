@@ -32,6 +32,10 @@ def _template_json(row) -> dict:
         "points_penalty": row["points_penalty"],
         "require_evidence": bool(row["require_evidence"]),
         "created_at": row["created_at"],
+        # v3.4
+        "mode_id": row.get("mode_id", "builtin:writing"),
+        "duration_min": row.get("duration_min", 30),
+        "timing_mode": row.get("timing_mode", "countdown"),
     }
 
 
@@ -66,14 +70,17 @@ def save_template(
     db.execute(
         """INSERT INTO template(family_id, template_id, name, title, due_time, days_mask,
             priority, mandatory, merit_reward, merit_penalty, points_reward, points_penalty,
-            require_evidence, created_at)
-           VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            require_evidence, created_at,
+            mode_id, duration_min, timing_mode)
+           VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
            ON CONFLICT(family_id, template_id) DO UPDATE SET
             name=excluded.name, title=excluded.title, due_time=excluded.due_time,
             days_mask=excluded.days_mask, priority=excluded.priority,
             mandatory=excluded.mandatory, merit_reward=excluded.merit_reward,
             merit_penalty=excluded.merit_penalty, points_reward=excluded.points_reward,
-            points_penalty=excluded.points_penalty, require_evidence=excluded.require_evidence""",
+            points_penalty=excluded.points_penalty, require_evidence=excluded.require_evidence,
+            mode_id=excluded.mode_id, duration_min=excluded.duration_min,
+            timing_mode=excluded.timing_mode""",
         (fid, template_id, name, title,
          str(body.get("due_time") or "19:00"),
          int(body.get("days_mask", 127)),
@@ -84,7 +91,10 @@ def save_template(
          int(body.get("points_reward", 0)),
          int(body.get("points_penalty", 0)),
          1 if body.get("require_evidence") else 0,
-         int(time.time() * 1000)),
+         int(time.time() * 1000),
+         str(body.get("mode_id", "builtin:writing"))[:64],
+         int(body.get("duration_min", 30)),
+         str(body.get("timing_mode", "countdown"))),
     )
     row = db.execute(
         "SELECT * FROM template WHERE family_id=? AND template_id=?",
@@ -128,11 +138,14 @@ async def dispatch_template(
     db.execute(
         """INSERT INTO task(family_id, task_id, title, due_time, days_mask, priority,
             mandatory, merit_reward, merit_penalty, points_reward, points_penalty,
-            require_evidence, active, updated_at)
-           VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            require_evidence, active, updated_at,
+            mode_id, duration_min, timing_mode)
+           VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
         (fid, task_id, tmpl["title"], tmpl["due_time"], tmpl["days_mask"],
          tmpl["priority"], tmpl["mandatory"], tmpl["merit_reward"], tmpl["merit_penalty"],
-         tmpl["points_reward"], tmpl["points_penalty"], tmpl["require_evidence"], 1, now),
+         tmpl["points_reward"], tmpl["points_penalty"], tmpl["require_evidence"], 1, now,
+         tmpl.get("mode_id", "builtin:writing"), tmpl.get("duration_min", 30),
+         tmpl.get("timing_mode", "countdown")),
     )
     rev = bump_revision(db, fid)
     await ws_push(fid, device_sockets, {"type": "tasks_changed"})

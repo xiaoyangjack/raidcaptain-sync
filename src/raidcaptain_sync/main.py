@@ -88,7 +88,7 @@ async def lifespan(app: FastAPI):
         return RevisionManager(db).get(fid, module_id)
 
     module_registry.register(create_task_module(
-        get_db, auth_parent, auth_device, ws_push, device_sockets,
+        get_db, auth_parent, auth_device, ws_push, device_sockets, parent_sockets,
         bump_rev, get_rev, make_task_id,
     ))
     module_registry.register(create_storyline_module(

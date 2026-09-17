@@ -230,6 +230,7 @@
   .task.task-new{animation:taskEnter 2s ease-out}
   .task.task-done{border-color:var(--light); background:rgba(139,172,15,.05)}
   .task.task-overdue{border-color:var(--red); background:rgba(224,91,75,.05)}
+  .task.task-in-progress{border-color:var(--blue); background:rgba(91,155,213,.05)}
   .task.task-pending{border-color:var(--gold)}
   @keyframes taskEnter{
     0%   {transform:translateY(-8px); box-shadow:0 0 0 2px var(--gold)}
@@ -255,6 +256,7 @@
   .task-status-badge.state-pending{background:rgba(242,193,78,.18); color:var(--gold); border:1px solid var(--gold)}
   .task-status-badge.state-done{background:rgba(139,172,15,.22); color:var(--light); border:1px solid var(--light)}
   .task-status-badge.state-overdue{background:rgba(224,91,75,.2); color:var(--red); border:1px solid var(--red)}
+  .task-status-badge.state-in-progress{background:rgba(91,155,213,.2); color:var(--blue); border:1px solid var(--blue)}
   .task-status-badge.state-evidence{position:absolute; top:6px; right:66px;
                     width:26px; height:26px; border-radius:50%;
                     display:flex; align-items:center; justify-content:center;
@@ -492,6 +494,7 @@
           <div class="chart-legend">
             <span><span class="dot d"></span>已完成</span>
             <span><span class="dot o"></span>已逾期</span>
+            <span><span class="dot i"></span>进行中</span>
           </div>
         </div>
       </div>
@@ -650,12 +653,32 @@
   </div>
 </div>
 
+<!-- ════ Tab 5: 任务下发留痕 ════ -->
+<div id="auditTab" class="tab">
+  <div class="card">
+    <div class="card-title">📝 任务下发留痕<span class="sp"></span>
+      <span class="dim" style="font-size:11px">记录家长下发/修改/停用任务的全过程</span>
+    </div>
+    <div class="filter-bar">
+      <button class="on" onclick="setAuditFilter('all')">全部</button>
+      <button onclick="setAuditFilter('created')">➕ 下发</button>
+      <button onclick="setAuditFilter('updated')">✏️ 修改</button>
+      <button onclick="setAuditFilter('disabled')">🚫 停用</button>
+    </div>
+    <div id="auditList" style="margin-top:8px"></div>
+    <div id="auditEmpty" class="empty" style="display:none">
+      <div class="icon">📝</div><div>暂无留痕记录</div>
+    </div>
+  </div>
+</div>
+
 <!-- ════ 底部导航 ════ -->
 <div class="navbar" id="navbar">
   <button id="navTask" class="on" onclick="switchTab('task')">📋 今日</button>
   <button id="navTmpl" onclick="switchTab('tmpl')">📚 模板</button>
   <button id="navReward" onclick="switchTab('reward')">🛒 军需处</button>
   <button id="navStats" onclick="switchTab('stats')">📡 作战</button>
+  <button id="navAudit" onclick="switchTab('audit')">📝 留痕</button>
   <button id="navAdmin" onclick="switchTab('admin')">⚙️ 设置</button>
 </div>
 
@@ -697,6 +720,23 @@
         <input id="tPointsR" type="number" value="5">
       </div>
     </div>
+    <label>任务场景</label>
+    <select id="tMode">
+      <option value="builtin:writing">✍️ 写作业</option>
+      <option value="builtin:online_class">💻 上网课</option>
+      <option value="builtin:piano">🎹 练琴</option>
+      <option value="builtin:reading">📖 阅读</option>
+      <option value="builtin:exercise">🏃 运动</option>
+      <option value="builtin:chores">🧹 家务</option>
+      <option value="builtin:free">🔄 自由任务</option>
+    </select>
+    <label>计时模式</label>
+    <select id="tTiming">
+      <option value="countdown">⏳ 倒计时（到点才算完成）</option>
+      <option value="countup">⏱ 正计时（按实际时长给分）</option>
+    </select>
+    <label>目标时长（分钟）<span class="dim" id="tDurLabel">（正计时/倒计时通用）</span></label>
+    <input id="tDur" type="number" value="30" min="1" max="240" style="width:120px">
     <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;margin-top:10px">
       <input id="tEvidence" type="checkbox" style="width:auto">
       📷 需拍照打卡（孩子完成时必须拍照取证）
@@ -736,14 +776,31 @@
     <div class="days" id="tmplDays"></div>
     <div class="flex" style="gap:6px">
       <div class="flex-1">
-        <label>完成功绩 +</label>
-        <input id="tmplMeritR" type="number" value="10">
-      </div>
-      <div class="flex-1">
-        <label>逾期功绩 −</label>
-        <input id="tmplMeritP" type="number" value="20">
-      </div>
-    </div>
+    <label>完成功绩 +</label>
+    <input id="tmplMeritR" type="number" value="10">
+  </div>
+  <div class="flex-1">
+    <label>逾期功绩 −</label>
+    <input id="tmplMeritP" type="number" value="20">
+  </div>
+</div>
+<label>任务场景</label>
+<select id="tmplMode">
+  <option value="builtin:writing">✍️ 写作业</option>
+  <option value="builtin:online_class">💻 上网课</option>
+  <option value="builtin:piano">🎹 练琴</option>
+  <option value="builtin:reading">📖 阅读</option>
+  <option value="builtin:exercise">🏃 运动</option>
+  <option value="builtin:chores">🧹 家务</option>
+  <option value="builtin:free">🔄 自由任务</option>
+</select>
+<label>计时模式</label>
+<select id="tmplTiming">
+  <option value="countdown">⏳ 倒计时（到点才算完成）</option>
+  <option value="countup">⏱ 正计时（按实际时长给分）</option>
+</select>
+<label>目标时长（分钟）</label>
+<input id="tmplDur" type="number" value="30" min="1" max="240" style="width:120px">
     <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;margin-top:10px">
       <input id="tmplEvidence" type="checkbox" style="width:auto">
       📷 需拍照打卡
@@ -962,17 +1019,20 @@ function switchTab(t){
   $("rewardTab").classList.toggle("active", t==="reward");
   $("appealTab").classList.toggle("active", t==="appeal");
   $("statsTab").classList.toggle("active", t==="stats");
+  $("auditTab").classList.toggle("active", t==="audit");
   $("adminTab").classList.toggle("active", t==="admin");
   $("navTask").className = t==="task" ? "on" : "";
   $("navTmpl").className = t==="tmpl" ? "on" : "";
   $("navAppeal").className = t==="appeal" ? "on" : "";
   $("navReward").className = t==="reward" ? "on" : "";
   $("navStats").className = t==="stats" ? "on" : "";
+  $("navAudit").className = t==="audit" ? "on" : "";
   $("navAdmin").className = t==="admin" ? "on" : "";
   if(t==="tmpl") loadTemplates();
   if(t==="reward") loadRewards();
   if(t==="appeal") loadAppeals("PENDING");
   if(t==="stats") loadStats();
+  if(t==="audit") loadAudit();
   if(t==="admin") loadAdmin();
   // FAB 只在「今日」页显示
   $("fab").style.display = (t==="task") ? "block" : "none";
@@ -1035,7 +1095,11 @@ function readTaskForm(prefix){
     points_reward: +$(prefix+"PointsR").value || 0,
     points_penalty: $(prefix+"Prio").value==="HIGH" ? 10 : 0,
     require_evidence: !!$(prefix+"Evidence").checked,
-    active: true
+    active: true,
+    // v3.4
+    mode_id: $(prefix+"Mode")?.value || "builtin:writing",
+    duration_min: +($(prefix+"Dur")?.value || 30),
+    timing_mode: $(prefix+"Timing")?.value || "countdown"
   };
 }
 
@@ -1047,6 +1111,9 @@ function setTaskForm(prefix, t){
   $(prefix+"MeritP").value = t.merit_penalty || 0;
   $(prefix+"PointsR").value = t.points_reward || 0;
   $(prefix+"Evidence").checked = !!t.require_evidence;
+  $(prefix+"Mode").value = t.mode_id || "builtin:writing";
+  $(prefix+"Timing").value = t.timing_mode || "countdown";
+  $(prefix+"Dur").value = t.duration_min || 30;
   const mask = t.days_mask || 127;
   $(prefix+"Days").querySelectorAll("input").forEach((cb, i) => {
     cb.checked = (mask >> i) & 1;
@@ -1061,6 +1128,9 @@ function clearTaskForm(prefix){
   $(prefix+"MeritP").value = 20;
   $(prefix+"PointsR").value = 5;
   $(prefix+"Evidence").checked = false;
+  $(prefix+"Mode").value = "builtin:writing";
+  $(prefix+"Timing").value = "countdown";
+  $(prefix+"Dur").value = 30;
   $(prefix+"Days").querySelectorAll("input").forEach((cb, i) => { cb.checked = i<5; });
 }
 
@@ -1139,6 +1209,9 @@ function renderToday(){
         badgeHtml = `<div class="task-status-badge state-done" title="${esc(st.device||'')} 已完成">✅</div>`;
         stateClass = 'task-done';
         if (st.evidence) extraBadge = `<div class="task-status-badge state-evidence" title="有照片">📷</div>`;
+      } else if (st.state === 'IN_PROGRESS') {
+        badgeHtml = `<div class="task-status-badge state-in-progress" title="${esc(st.device||'')} 进行中">▶️</div>`;
+        stateClass = 'task-in-progress';
       } else {
         badgeHtml = `<div class="task-status-badge state-overdue" title="${esc(st.device||'')} 逾期">❌</div>`;
         stateClass = 'task-overdue';
@@ -1165,7 +1238,8 @@ function renderToday(){
         ${evList.length>4?`<div style="display:flex;align-items:center;justify-content:center;width:48px;height:48px;border-radius:4px;border:1px solid var(--line);background:var(--panel2);color:var(--sub);font-size:11px">+${evList.length-4}</div>`:''}
       </div>` : '';
     const stateChip = st && st.state==='DONE' ? `<span class="chip" style="color:var(--light);border-color:var(--light)">已完成</span>`
-                : (st && st.state!=='DONE' ? `<span class="chip" style="color:var(--red);border-color:var(--red)">逾期</span>` : '');
+                : (st && st.state==='IN_PROGRESS' ? `<span class="chip" style="color:var(--blue);border-color:var(--blue)">进行中</span>` 
+                : (st && st.state!=='DONE' ? `<span class="chip" style="color:var(--red);border-color:var(--red)">逾期</span>` : ''));
     const devText = st ? ` · ${esc(st.device||'')}` : '';
     return `
       <div class="task ${active?'':'task-inactive'} ${stateClass}" data-tid="${esc(t.task_id)}">
@@ -1181,7 +1255,7 @@ function renderToday(){
             ${!active?'<span class="chip">非今日</span>':''}
             ${stateChip}
           </div>
-          <div class="task-meta">${maskName(t.days_mask)} · 功绩+${t.merit_reward}${t.merit_penalty?"/逾期-"+t.merit_penalty:""}${devText}</div>
+          <div class="task-meta">${maskName(t.days_mask)} · 功绩+${t.merit_reward}${t.merit_penalty?"/逾期-"+t.merit_penalty:""}${devText} · ${t.timing_mode==="countup"?"⏱正计时":"⏳倒计时"} ${t.duration_min||30}分钟</div>
           ${thumbsHtml}
         </div>
         ${badgeHtml}
@@ -1455,6 +1529,9 @@ function openTmplModal(){
   $("tmplMeritR").value = 10;
   $("tmplMeritP").value = 20;
   $("tmplEvidence").checked = false;
+  $("tmplMode").value = "builtin:writing";
+  $("tmplTiming").value = "countdown";
+  $("tmplDur").value = 30;
   $("tmplDays").querySelectorAll("input").forEach((cb, i) => cb.checked = i<5);
   $("tmplSubmitBtn").textContent = "💾 保存模板";
   $("tmplModal").classList.add("active");
@@ -1472,6 +1549,9 @@ function openEditTmplModal(tmplId){
   $("tmplMeritR").value = t.merit_reward || 10;
   $("tmplMeritP").value = t.merit_penalty || 20;
   $("tmplEvidence").checked = !!t.require_evidence;
+  $("tmplMode").value = t.mode_id || "builtin:writing";
+  $("tmplTiming").value = t.timing_mode || "countdown";
+  $("tmplDur").value = t.duration_min || 30;
   const mask = t.days_mask || 127;
   $("tmplDays").querySelectorAll("input").forEach((cb, i) => cb.checked = !!(mask & (1<<i)));
   $("tmplSubmitBtn").textContent = "✏️ 更新模板";
@@ -1507,7 +1587,10 @@ async function saveTemplate(){
         merit_penalty: +$("tmplMeritP").value || 0,
         points_reward: 5,
         points_penalty: $("tmplPrio").value==="HIGH" ? 10 : 0,
-        require_evidence: $("tmplEvidence").checked
+        require_evidence: $("tmplEvidence").checked,
+        mode_id: $("tmplMode").value,
+        duration_min: +($("tmplDur").value || 30),
+        timing_mode: $("tmplTiming").value
       })
     });
     toast(editingTmplId ? "✅ 模板已更新" : "✅ 模板已保存", "success");
@@ -1521,6 +1604,7 @@ function renderTemplates(){
     $("tmplList").innerHTML = '<div class="empty"><div class="icon">📚</div><div>暂无模板</div><div class="dim" style="margin-top:4px">在「今日」页填写任务后点「存模板」保存</div></div>';
     return;
   }
+  const modeLabel = {"builtin:writing":"✍️写作业","builtin:online_class":"💻上网课","builtin:piano":"🎹练琴","builtin:reading":"📖阅读","builtin:exercise":"🏃运动","builtin:chores":"🧹家务","builtin:free":"🔄自由"};
   $("tmplList").innerHTML = templates.map(t => `
     <div class="tmpl">
       <div class="tname">${esc(t.name)}</div>
@@ -1528,6 +1612,8 @@ function renderTemplates(){
         <span class="chip ${prioClass(t.priority)}">${prioName(t.priority)}</span>
         ${t.mandatory?'<span class="chip mand">强制</span>':''}
         ${t.require_evidence?'<span class="chip evid">📷拍照</span>':''}
+        <span class="chip">${modeLabel[t.mode_id]||t.mode_id||"✍️写作业"}</span>
+        <span class="chip">${t.timing_mode==="countup"?"⏱正计时":"⏳倒计时"}</span>
         · 功绩+${t.merit_reward}${t.merit_penalty?"/逾期-"+t.merit_penalty:""}
       </div>
       <div class="row">
@@ -1674,6 +1760,67 @@ async function showAppealEvidence(evIds){
 }
 
 // ============================================================
+// 任务下发留痕
+// ============================================================
+let auditFilter = 'all';
+let auditData = [];
+
+async function loadAudit(){
+  try {
+    const j = await api(`/api/parent/task-audit?limit=100&offset=0`);
+    auditData = j.records || [];
+    renderAudit();
+  } catch(e){
+    $("auditList").innerHTML = '<div class="dim" style="padding:16px;text-align:center">加载失败 '+esc(e.message)+'</div>';
+  }
+}
+
+function setAuditFilter(k){
+  auditFilter = k;
+  document.querySelectorAll("#auditTab .filter-bar button").forEach(b => {
+    b.classList.toggle("on", b.textContent.includes(
+      k==='all'?'全部':k==='created'?'下发':k==='updated'?'修改':'停用'
+    ));
+  });
+  renderAudit();
+}
+
+function renderAudit(){
+  const list = auditFilter==='all' ? auditData : auditData.filter(r => r.action===auditFilter);
+  const el = $("auditList");
+  const empty = $("auditEmpty");
+  if(!list.length){
+    el.innerHTML = "";
+    empty.style.display = "";
+    return;
+  }
+  empty.style.display = "none";
+  const actionIcon = {"created":"➕","updated":"✏️","disabled":"🚫"};
+  const actionLabel = {"created":"下发","updated":"修改","disabled":"停用"};
+  el.innerHTML = list.map(r => `
+    <div class="tl-item" style="padding:10px;border-bottom:1px solid var(--line)">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+        <span style="font-size:18px">${actionIcon[r.action]||"📝"}</span>
+        <span style="font-weight:700">${actionLabel[r.action]||r.action}</span>
+        <span class="dim" style="font-size:11px;margin-left:auto">${formatTime(r.created_at)}</span>
+      </div>
+      <div style="font-size:13px;color:var(--sub);margin-bottom:2px">
+        操作人：<b>${esc(r.actor||"系统")}</b>
+      </div>
+      ${r.after && r.after.title ? `<div style="font-size:13px">任务：<b>${esc(r.after.title||r.before?.title||"")}</b></div>` : ""}
+      ${r.after && r.after.mode_id ? `<div style="font-size:12px;color:var(--sub)">场景：${esc(r.after.mode_id)} · ${r.after.timing_mode==="countup"?"⏱正计时":"⏳倒计时"} ${r.after.duration_min||30}分钟</div>` : ""}
+      ${r.before && r.after && JSON.stringify(r.before)!==JSON.stringify(r.after) ? `
+        <div style="margin-top:4px;font-size:11px;color:var(--sub)">
+          ${r.before.title && r.before.title!==r.after.title ? `标题：「${esc(r.before.title)}」→「${esc(r.after.title)}」<br>` : ""}
+          ${r.before.timing_mode && r.before.timing_mode!==r.after.timing_mode ? `计时：${r.before.timing_mode} → ${r.after.timing_mode}<br>` : ""}
+          ${r.before.duration_min && r.before.duration_min!==r.after.duration_min ? `时长：${r.before.duration_min}分钟 → ${r.after.duration_min}分钟<br>` : ""}
+        </div>
+      ` : ""}
+    </div>
+  `).join("");
+}
+
+// ============================================================
 // 作战指挥台（统一时间线）
 // ============================================================
 let timelineDays = 7;       // 默认近7天
@@ -1772,15 +1919,16 @@ function renderTimelineEvent(ev){
   const device = esc(ev.device_name||"");
   if(ev.kind === "task_completion"){
     const ok = ev.state === "DONE";
-    const icon = ok ? "✅" : "❌";
-    const cls = ok ? "border-left-color:var(--light)" : "border-left-color:var(--red)";
+    const inProgress = ev.state === "IN_PROGRESS";
+    const icon = ok ? "✅" : (inProgress ? "▶️" : "❌");
+    const cls = ok ? "border-left-color:var(--light)" : (inProgress ? "border-left-color:var(--sky)" : "border-left-color:var(--red)");
     const meritTxt = ev.merit_delta ? (ev.merit_delta>0?`+${ev.merit_delta}`:ev.merit_delta) : "";
     return `<div class="tl-ev" style="${cls}">
       <div class="tl-ev-icon">${icon}</div>
       <div class="tl-ev-body">
         <div class="tl-ev-title">${esc(ev.title||"未知任务")} <span class="tl-ev-time">${ts}</span></div>
         <div class="tl-ev-meta">
-          ${ok?"已完成":"已逾期"}
+          ${ok?"已完成":(inProgress?"进行中":"已逾期")}
           ${meritTxt?`<span style="color:${ev.merit_delta>0?'var(--gold)':'var(--red)'}"> ${meritTxt}功</span>`:""}
           ${ev.evidence_id?`<img class="tl-ev-thumb" src="/api/evidence/${ev.evidence_id}?token=${parentToken}" onclick="openLightbox(${ev.evidence_id},'${esc(ev.title)}','${ts}')">`:""}
           ${device?`<span class="dim"> · ${device}</span>`:""}
@@ -2226,6 +2374,25 @@ function connectWS(){
     try{
       const m = JSON.parse(e.data);
       if(m.type==="device_status") renderDevStatus(m);
+      else if(m.type==="task_state_changed") {
+        // 设备上报任务状态变更（IN_PROGRESS / DONE / OVERDUE）
+        const now = Date.now();
+        const ev = {
+          kind: "task_completion",
+          created_at: now,
+          data: {
+            task_id: m.task_id || "",
+            title: m.title || "",
+            state: m.state || "",
+            actual_minutes: m.actual_minutes || 0,
+            timing_mode: m.timing_mode || "countdown",
+          },
+          device_name: m.device_name || "",
+        };
+        renderEvent(ev);
+        onTimelinePush(ev);
+        if(m.state==="DONE"||m.state==="OVERDUE") loadTodayStates();
+      }
       else if(m.type==="event") {
         renderEvent(m.event);
         onTimelinePush(m.event);        // 实时推入时间线
@@ -2247,9 +2414,10 @@ function renderEvent(ev){
   // 战况不展示 task_id 等技术字段，拍照任务的图片也不展开
   if(ev.kind==="task_completion"){
     const ok = ev.data.state==="DONE";
+    const inProgress = ev.data.state==="IN_PROGRESS";
     addFeed({
       kind: "task_completion",
-      html: `<span class="ts">${t}</span>军令「${esc(ev.data.title || ev.data.task_id)}」 ${ok?"✅ 已完成":"❌ 逾期未完成"}`,
+      html: `<span class="ts">${t}</span>军令「${esc(ev.data.title || ev.data.task_id)}」 ${ok?"✅ 已完成":(inProgress?"▶️ 进行中":"❌ 逾期未完成")}`,
       data: ev.data
     });
   } else if(ev.kind==="mission_result"){

@@ -80,7 +80,7 @@ def parent_today_states(
 
     rows = db.execute("""
         SELECT _id, kind, payload, created_at, device_name FROM event
-        WHERE family_id=? AND kind IN ('task_completion','mission_result')
+        WHERE family_id=? AND kind IN ('task_completion','mission_result','task_state_update')
           AND created_at >= ? AND created_at < ?
         ORDER BY _id DESC
     """, (fid, t_start, t_end)).fetchall()
@@ -92,7 +92,21 @@ def parent_today_states(
         except Exception:
             p = {}
         tid = p.get("task_id")
-        if r["kind"] == "task_completion" and tid and tid not in latest_by_task:
+        if not tid:
+            continue
+        if r["kind"] == "task_state_update":
+            # task_state_update 包含所有状态（IN_PROGRESS / DONE / OVERDUE）
+            if tid not in latest_by_task:
+                latest_by_task[tid] = {
+                    "state": p.get("state", "PENDING"),
+                    "created_at": r["created_at"],
+                    "device": r["device_name"],
+                    "evidence": False,
+                    "title": p.get("title", ""),
+                    "actual_minutes": p.get("actual_minutes", 0),
+                    "timing_mode": p.get("timing_mode", "countdown"),
+                }
+        elif r["kind"] == "task_completion" and tid not in latest_by_task:
             latest_by_task[tid] = {
                 "state": p.get("state", "DONE"),
                 "created_at": r["created_at"],
