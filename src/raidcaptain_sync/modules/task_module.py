@@ -44,9 +44,9 @@ def _task_json(row: dict, deleted: bool = False) -> dict:
         "active": False if deleted else bool(row["active"]),
         "updated_at": row["updated_at"],
         # v3.4
-        "mode_id": row.get("mode_id", "builtin:writing"),
-        "duration_min": row.get("duration_min", 30),
-        "timing_mode": row.get("timing_mode", "countdown"),
+        "mode_id": row["mode_id"] if "mode_id" in row else "builtin:writing",
+        "duration_min": row["duration_min"] if "duration_min" in row else 30,
+        "timing_mode": row["timing_mode"] if "timing_mode" in row else "countdown",
     }
 
 
@@ -62,25 +62,25 @@ def _validate_duration_min(v: int) -> int:
     return v
 
 
-def _task_snapshot(row: dict) -> dict:
-    """返回任务公开字段快照，用于 audit before/after。"""
-    return {
-        "task_id": row["task_id"],
-        "title": row["title"],
-        "due_time": row["due_time"],
-        "days_mask": row["days_mask"],
-        "priority": row["priority"],
-        "mandatory": bool(row["mandatory"]),
-        "merit_reward": row["merit_reward"],
-        "merit_penalty": row["merit_penalty"],
-        "points_reward": row["points_reward"],
-        "points_penalty": row["points_penalty"],
-        "require_evidence": bool(row["require_evidence"]),
-        "active": bool(row["active"]),
-        "mode_id": row.get("mode_id", "builtin:writing"),
-        "duration_min": row.get("duration_min", 30),
-        "timing_mode": row.get("timing_mode", "countdown"),
-    }
+    def _task_snapshot(row: dict) -> dict:
+        """返回任务公开字段快照，用于 audit before/after。"""
+        return {
+            "task_id": row["task_id"],
+            "title": row["title"],
+            "due_time": row["due_time"],
+            "days_mask": row["days_mask"],
+            "priority": row["priority"],
+            "mandatory": bool(row["mandatory"]),
+            "merit_reward": row["merit_reward"],
+            "merit_penalty": row["merit_penalty"],
+            "points_reward": row["points_reward"],
+            "points_penalty": row["points_penalty"],
+            "require_evidence": bool(row["require_evidence"]),
+            "active": bool(row["active"]),
+            "mode_id": row["mode_id"] if "mode_id" in row else "builtin:writing",
+            "duration_min": row["duration_min"] if "duration_min" in row else 30,
+            "timing_mode": row["timing_mode"] if "timing_mode" in row else "countdown",
+        }
 
 
 class TaskModule(BaseModule):
