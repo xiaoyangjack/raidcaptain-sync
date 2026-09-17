@@ -37,16 +37,17 @@ def _task_json(row, deleted: bool = False) -> dict:
         "require_evidence": bool(row["require_evidence"]),
         "active": False if deleted else bool(row["active"]),
         "updated_at": row["updated_at"],
-        # v3.4
-        "mode_id": row.get("mode_id", "builtin:writing"),
-        "duration_min": row.get("duration_min", 30),
-        "timing_mode": row.get("timing_mode", "countdown"),
+        # v3.4 — use `or` fallback because SQLite NULL returns None, not missing key
+        "mode_id": row.get("mode_id") or "builtin:writing",
+        "duration_min": row.get("duration_min") or 30,
+        "timing_mode": row.get("timing_mode") or "countdown",
     }
 
 
+# v3.4 — 支持 countdown / countup / photo
 def _validate_timing_mode(v: str) -> str:
-    if v not in ("countdown", "countup"):
-        raise HTTPException(400, f"timing_mode must be countdown or countup, got '{v}'")
+    if v not in ("countdown", "countup", "photo"):
+        raise HTTPException(400, f"timing_mode must be countdown/countup/photo, got '{v}'")
     return v
 
 
@@ -119,11 +120,15 @@ async def parent_push_tasks(
     last_task_id = None
     for t in tasks:
         task_id = str(t.get("task_id") or _new_task_id())
+        timing_mode = _validate_timing_mode(str(t.get("timing_mode", "countdown")))
+        dur = _validate_duration_min(int(t.get("duration_min", 30)))
+        mode_id = str(t.get("mode_id", "builtin:writing"))[:64]
         db.execute(
             """INSERT OR REPLACE INTO task(family_id, task_id, title, due_time, days_mask,
                 priority, mandatory, merit_reward, merit_penalty, points_reward, points_penalty,
-                require_evidence, active, updated_at)
-               VALUES(?,?,?,?,?,?,?,?,?,?,?,?,1,?)""",
+                require_evidence, active, updated_at,
+                mode_id, duration_min, timing_mode)
+               VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (fid, task_id,
              str(t.get("title", ""))[:64],
              str(t.get("due_time", "20:00")),
@@ -135,7 +140,8 @@ async def parent_push_tasks(
              int(t.get("points_reward", 0)),
              int(t.get("points_penalty", 0)),
              1 if t.get("require_evidence") else 0,
-             now),
+             1, now,
+             mode_id, dur, timing_mode),
         )
         last_task_id = task_id
     rev = bump_revision(db, fid)
