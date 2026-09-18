@@ -6,10 +6,10 @@
   },
   "deploy": {
     "numReplicas": 1,
-    "restartPolicyType": "ON_FAILURE",
+    "restartPolicyType": "ALWAYS",
     "restartPolicyMaxRetries": 10,
-    "healthcheckPath": "/health",
-    "healthcheckPort": 8000,
+    "healthcheckPath": "/api/health",
+    "healthcheckTimeout": 30,
     "port": 8000
   }
 }

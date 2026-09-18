@@ -51,8 +51,8 @@ def _task_json(row: dict, deleted: bool = False) -> dict:
 
 
 def _validate_timing_mode(v: str) -> str:
-    if v not in ("countdown", "countup"):
-        raise HTTPException(400, f"timing_mode must be countdown or countup, got '{v}'")
+    if v not in ("countdown", "countup", "photo"):
+        raise HTTPException(400, f"timing_mode must be countdown/countup/photo, got '{v}'")
     return v
 
 
@@ -62,25 +62,27 @@ def _validate_duration_min(v: int) -> int:
     return v
 
 
-    def _task_snapshot(row: dict) -> dict:
-        """返回任务公开字段快照，用于 audit before/after。"""
-        return {
-            "task_id": row["task_id"],
-            "title": row["title"],
-            "due_time": row["due_time"],
-            "days_mask": row["days_mask"],
-            "priority": row["priority"],
-            "mandatory": bool(row["mandatory"]),
-            "merit_reward": row["merit_reward"],
-            "merit_penalty": row["merit_penalty"],
-            "points_reward": row["points_reward"],
-            "points_penalty": row["points_penalty"],
-            "require_evidence": bool(row["require_evidence"]),
-            "active": bool(row["active"]),
-            "mode_id": row["mode_id"] if "mode_id" in row else "builtin:writing",
-            "duration_min": row["duration_min"] if "duration_min" in row else 30,
-            "timing_mode": row["timing_mode"] if "timing_mode" in row else "countdown",
-        }
+def _task_snapshot(row: dict) -> dict:
+    """返回任务公开字段快照，用于 audit before/after。"""
+    if not row:
+        return {}
+    return {
+        "task_id": row.get("task_id", ""),
+        "title": row.get("title", ""),
+        "due_time": row.get("due_time", ""),
+        "days_mask": row.get("days_mask", 127),
+        "priority": row.get("priority", "MED"),
+        "mandatory": bool(row.get("mandatory", 0)),
+        "merit_reward": row.get("merit_reward", 0),
+        "merit_penalty": row.get("merit_penalty", 0),
+        "points_reward": row.get("points_reward", 0),
+        "points_penalty": row.get("points_penalty", 0),
+        "require_evidence": bool(row.get("require_evidence", 0)),
+        "active": bool(row.get("active", 1)),
+        "mode_id": row.get("mode_id") or "builtin:writing",
+        "duration_min": row.get("duration_min") or 30,
+        "timing_mode": row.get("timing_mode") or "countdown",
+    }
 
 
 class TaskModule(BaseModule):
@@ -366,6 +368,34 @@ class TaskModule(BaseModule):
                     for r in rows
                 ],
             }
+
+        # v3.1: 删除任务
+        @r.delete("/parent/tasks/{task_id}")
+        async def delete_task(task_id: str, authorization: str | None = Header(None),
+                               db=Depends(self._get_db)):
+            """家长删除某条任务（软禁用）。"""
+            fam = self._auth_parent(db, authorization)
+            fid = fam["id"]
+            tid = task_id.strip()
+            if not tid:
+                raise HTTPException(400, "task_id 为空")
+            old = db.execute(
+                "SELECT * FROM task WHERE family_id=? AND task_id=?", (fid, tid)
+            ).fetchone()
+            now = int(time.time() * 1000)
+            if old:
+                db.execute(
+                    "UPDATE task SET active=0, updated_at=? WHERE family_id=? AND task_id=?",
+                    (now, fid, tid),
+                )
+                _write_audit(db, fid, tid, "deleted",
+                             authorization or "parent",
+                             _task_snapshot(dict(old)), {})
+                rev = self._bump_revision(db, fid)
+                await self._ws_push(fid, self._device_sockets,
+                                    {"type": "tasks_updated", "revision": rev})
+                return {"ok": True, "task_id": tid, "revision": rev}
+            raise HTTPException(404, f"任务 {tid} 不存在")
 
         # ── V26: 任务状态回写（对局结束后由设备上报） ──
         @r.post("/device/tasks/state")

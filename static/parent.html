@@ -39,7 +39,13 @@
   .stat.bad .v{color:var(--red)}
   .stat.ok .v{color:var(--light)}
 
-  /* 卡片 */
+  /* 拍照打卡审核 */ #reviewList{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px}
+.task-thumbs img{width:100%;height:80px;object-fit:cover;border-radius:4px}
+.thumb-wrap{display:flex;flex-direction:column;gap:6px}
+.thumb-actions{display:flex;gap:6px}
+.thumb-actions button{flex:1;padding:6px 8px;font-size:12px;border-radius:4px;border:1px solid var(--line);background:var(--panel2);color:var(--text);cursor:pointer}
+.thumb-actions button.approve{color:var(--success);border-color:var(--success)}
+.thumb-actions button.reject{color:var(--red);border-color:var(--red)}
   .card{background:var(--panel); border:1px solid var(--line); border-radius:10px;
         padding:10px; margin-top:8px}
   .card-title{display:flex; align-items:center; gap:6px; font-weight:700;
@@ -111,12 +117,15 @@
   /* 弹窗（底部弹出） */
   .modal-bg{position:fixed; inset:0; background:rgba(0,0,0,.7);
             z-index:100; display:none; align-items:flex-end; justify-content:center}
-  .modal-bg.active{display:flex}
+  .modal-bg.active{display:flex; animation:modalIn .25s ease-out}
   .modal{background:var(--bg); border:1px solid var(--line); border-radius:14px 14px 0 0;
           width:100%; max-width:560px; max-height:90vh; overflow-y:auto;
           padding:14px 14px 24px; animation:slideUp .25s ease-out;
           color:var(--ink)}
   @keyframes slideUp{from{transform:translateY(100%)} to{transform:translateY(0)}}
+  @keyframes modalIn{from{opacity:0} to{opacity:1}}
+  .modal-bg.closing .modal{animation:slideDown .2s ease-in forwards}
+  @keyframes slideDown{from{transform:translateY(0)} to{transform:translateY(100%)}}
   .modal-handle{width:36px; height:4px; background:var(--line); border-radius:2px;
                 margin:0 auto 10px}
   .modal-title{font-size:16px; font-weight:700; margin-bottom:10px}
@@ -126,9 +135,13 @@
   /* 二次确认 */
   .confirm-bg{position:fixed; inset:0; background:rgba(0,0,0,.85); z-index:200;
               display:none; align-items:center; justify-content:center; padding:20px}
-  .confirm-bg.active{display:flex}
+  .confirm-bg.active{display:flex; animation:fadeIn .2s ease-out}
+  .confirm-bg.closing{animation:fadeOut .2s ease-in forwards}
   .confirm-box{background:var(--panel); border:1px solid var(--line); border-radius:12px;
-               padding:18px; max-width:340px; width:100%}
+               padding:18px; max-width:340px; width:100%; animation:scaleIn .2s ease-out}
+  @keyframes fadeIn{from{opacity:0} to{opacity:1}}
+  @keyframes fadeOut{from{opacity:1} to{opacity:0}}
+  @keyframes scaleIn{from{transform:scale(0.9); opacity:0} to{transform:scale(1); opacity:1}}
   .confirm-box h3{margin:0 0 8px; font-size:16px}
   .confirm-box p{margin:6px 0 14px; color:var(--sub); font-size:13px; line-height:1.5}
   .confirm-box .row{display:flex; gap:8px}
@@ -404,6 +417,12 @@
       <div class="view-toggle" id="viewToggle">
         <button class="on" data-view="today" onclick="switchTaskView('today')">今日 (0)</button>
         <button data-view="all" onclick="switchTaskView('all')">全部 (0)</button>
+      </div>
+      <div id="reviewSection" style="display:none">
+        <div class="card" style="margin-top:8px;border-color:var(--gold)">
+        <div class="card-title">📷 待审批打卡 <span class="dim" id="reviewCount"></span></div>
+        <div id="reviewList"></div>
+        </div>
       </div>
       <div id="todayList"></div>
     </div>
@@ -734,8 +753,9 @@
     <select id="tTiming">
       <option value="countdown">⏳ 倒计时（到点才算完成）</option>
       <option value="countup">⏱ 正计时（按实际时长给分）</option>
+      <option value="photo">📷 拍照打卡（无需计时，家长确认后加分）</option>
     </select>
-    <label>目标时长（分钟）<span class="dim" id="tDurLabel">（正计时/倒计时通用）</span></label>
+    <label>目标时长（分钟）<span class="dim" id="tDurLabel">（正计时/倒计时通用；拍照打卡无需计时）</span></label>
     <input id="tDur" type="number" value="30" min="1" max="240" style="width:120px">
     <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;margin-top:10px">
       <input id="tEvidence" type="checkbox" style="width:auto">
@@ -798,6 +818,7 @@
 <select id="tmplTiming">
   <option value="countdown">⏳ 倒计时（到点才算完成）</option>
   <option value="countup">⏱ 正计时（按实际时长给分）</option>
+  <option value="photo">📷 拍照打卡（无需计时，家长确认后加分）</option>
 </select>
 <label>目标时长（分钟）</label>
 <input id="tmplDur" type="number" value="30" min="1" max="240" style="width:120px">
@@ -1165,6 +1186,78 @@ function switchTaskView(v){
   renderToday();
 }
 
+async function loadPendingReviews(){
+  try{
+    const j = await api("/api/parent/today-states");
+    const evList = (j.evidence||[]) // 简化：实际由后端返回待审列表
+    updateReviewUI();
+  }catch(e){}
+}
+
+function updateReviewUI(){
+  const countEl = $("reviewCount");
+  const listEl = $("reviewList");
+  // 后端将今日未审批的 photo 任务返回在 evidence 状态中
+  const pending = Object.entries(taskEvidence || {})
+    .filter(([tid, st]) => st && st.state === 'PENDING' && tasksById[tid]?.timing_mode === 'photo')
+    .map(([tid, st]) => ({tid, ...st}));
+  if(countEl) countEl.textContent = pending.length;
+  if(!listEl) return;
+  if(!pending.length){
+    listEl.innerHTML = '<div class="empty">暂无待审批打卡</div>';
+    return;
+  }
+  listEl.innerHTML = pending.map(m => {
+    const t = tasksById[m.task_id];
+    return `
+      <div class="task thumb-card" data-tid="${esc(m.task_id)}">
+        <div class="thumb-wrap">
+          <img class="task-thumb" loading="lazy"
+            src="/api/evidence/${m.id}?token=${parentToken}"
+            alt="${esc(t.title)}">
+          <div class="task-title">${esc(t.title)}</div>
+          <div class="task-meta">${m.device_name} · ${m.at?new Date(m.at).toLocaleString():''}</div>
+        </div>
+        <div class="thumb-actions">
+          <button class="approve" onclick="reviewPhoto('${esc(m.task_id)}','approve')">✅ 确认</button>
+          <button class="reject" onclick="reviewPhoto('${esc(m.task_id)}','reject')">❌ 驳回</button>
+        </div>
+      </div>`;
+  }).join("");
+}
+
+async function reviewPhoto(taskId, verdict){
+  setConfirmLoading(true);
+  try{
+    const j = await api("/api/parent/tasks/"+taskId+"/photo-review", {
+      method:"POST",
+      body: JSON.stringify({verdict})
+    });
+    await loadTodayStates();
+    updateReviewUI();
+    toast(verdict==='approve'?'✅ 打卡确认':'❌ 已驳回', 'success');
+  }catch(e){
+    const r = detectError(e);
+    toast(r.msg, 'error');
+  }finally{
+    setConfirmLoading(false);
+  }
+}
+
+/** 签到 / 服刑管理 */
+function switchTab(t){
+  document.querySelectorAll(".tab").forEach(el => el.classList.remove("active"));
+  $("taskTab").classList.toggle("active", t==="task");
+  $("tmplTab").classList.toggle("active", t==="tmpl");
+  $("rewardTab").classList.toggle("active", t==="reward");
+  $("appealTab").classList.toggle("active", t==="appeal");
+  $("statsTab").classList.toggle("active", t==="stats");
+  $("auditTab").classList.toggle("active", t==="audit");
+  if(t==="task"){
+    loadPendingReviews();
+  }
+}
+
 function renderToday(){
   const today = new Date();
   const weekday = weekdayNow();
@@ -1255,7 +1348,7 @@ function renderToday(){
             ${!active?'<span class="chip">非今日</span>':''}
             ${stateChip}
           </div>
-          <div class="task-meta">${maskName(t.days_mask)} · 功绩+${t.merit_reward}${t.merit_penalty?"/逾期-"+t.merit_penalty:""}${devText} · ${t.timing_mode==="countup"?"⏱正计时":"⏳倒计时"} ${t.duration_min||30}分钟</div>
+          <div class="task-meta">${maskName(t.days_mask)} · 功绩+${t.merit_reward}${t.merit_penalty?"/逾期-"+t.merit_penalty:""}${devText} · ${t.timing_mode==="photo"?"📷拍照打卡":(t.timing_mode==="countup"?"⏱正计时":"⏳倒计时")} ${t.timing_mode==="photo"?"":(t.duration_min||30+"分钟")}</div>
           ${thumbsHtml}
         </div>
         ${badgeHtml}
@@ -1282,6 +1375,7 @@ async function deleteActiveTask(taskId){
     lastSyncRev = j.revision;
     toast(`✅ 已删除（剩余 ${remaining.length} 条）`, "success");
     await loadTasks();
+    refreshStatus();
   }catch(e){
     const r = detectError(e);
     toast(r.msg, "error");
@@ -1320,10 +1414,24 @@ function openEditTaskModal(taskId){
 
 function closeTaskModal(){
   if(isDispatching) return;   // 下发中禁止关闭
-  $("taskModal").classList.remove("active");
-  setModalLoading(false);
-  clearError();
-  editingTaskId = null;
+  animateCloseModal($("taskModal"), () => {
+    setModalLoading(false);
+    clearError();
+    editingTaskId = null;
+  });
+}
+
+/** 平滑关闭弹窗：先播放下滑动画，结束后再清理状态 */
+function animateCloseModal(modalEl, cleanup){
+  if(!modalEl.classList.contains("active")){
+    if(cleanup) cleanup();
+    return;
+  }
+  modalEl.classList.add("closing");
+  setTimeout(() => {
+    modalEl.classList.remove("active", "closing");
+    if(cleanup) cleanup();
+  }, 200);
 }
 $("taskModal").addEventListener("click", e => {
   if(e.target === $("taskModal")) closeTaskModal();
@@ -1385,15 +1493,15 @@ async function doDispatch(taskList){
     });
     lastSyncRev = j.revision;
 
-    // 成功：关弹窗 + toast + 刷新
+    // 成功：先关弹窗再 toast + 刷新（editingTaskId 会被 closeTaskModal 清空，先记住）
+    const wasEditing = !!editingTaskId;
+    const targetId = editingTaskId || (taskList[taskList.length-1] || {}).task_id;
     closeTaskModal();
-    setModalLoading(false);
-    toast(editingTaskId ? "✅ 军令已更新" : `✅ 已下发（revision ${j.revision}）`, "success");
+    toast(wasEditing ? "✅ 军令已更新" : `✅ 已下发（revision ${j.revision}）`, "success");
     await loadTasks();
     refreshStatus();
 
     // 高亮被更新的任务
-    const targetId = editingTaskId || (taskList[taskList.length-1] || {}).task_id;
     if(targetId){
       setTimeout(() => {
         const el = document.querySelector(`[data-tid="${targetId}"]`);
@@ -1458,12 +1566,18 @@ function showConfirm(title, desc, onOk){
     }
     // 成功路径由 callback 内部关闭；失败路径不关闭
   };
+  // 先移除可能残留的 closing 类，再显示
+  $("confirmModal").classList.remove("closing");
   $("confirmModal").classList.add("active");
 }
 function closeConfirm(){
-  $("confirmModal").classList.remove("active");
-  confirmCallback = null;
-  setConfirmLoading(false);
+  const modal = $("confirmModal");
+  modal.classList.add("closing");
+  setTimeout(() => {
+    modal.classList.remove("active", "closing");
+    confirmCallback = null;
+    setConfirmLoading(false);
+  }, 200);
 }
 $("confirmModal").addEventListener("click", e => {
   if(e.target === $("confirmModal") && !$("confirmOk").disabled) closeConfirm();
@@ -1559,8 +1673,9 @@ function openEditTmplModal(tmplId){
 }
 
 function closeTmplModal(){
-  $("tmplModal").classList.remove("active");
-  editingTmplId = null;
+  animateCloseModal($("tmplModal"), () => {
+    editingTmplId = null;
+  });
 }
 $("tmplModal").addEventListener("click", e => {
   if(e.target === $("tmplModal")) closeTmplModal();
@@ -1596,6 +1711,8 @@ async function saveTemplate(){
     toast(editingTmplId ? "✅ 模板已更新" : "✅ 模板已保存", "success");
     closeTmplModal();
     await loadTemplates();
+    // 切换回「模板」tab，展示结果
+    switchTab('tmpl');
   }catch(e){ toast(e.message); }
 }
 

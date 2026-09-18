@@ -94,6 +94,98 @@ def get_evidence(
     raise HTTPException(404, "证据文件未找到")
 
 
+@router.post("/api/evidence/{ev_id}/approve")
+def approve_evidence(
+    ev_id: int,
+    authorization: str | None = Header(None),
+    db=Depends(get_db),
+):
+    """家长确认证据有效，触发加分。"""
+    import json
+    
+    fam = auth_parent(db, authorization)
+    ev = db.execute(
+        "SELECT * FROM evidence_file WHERE _id=? AND family_id=?",
+        (ev_id, fam["id"]),
+    ).fetchone()
+    if not ev:
+        raise HTTPException(404, "证据不存在")
+    
+    # 检查是否已确认
+    if ev["review_status"] == "approved":
+        raise HTTPException(400, "该证据已被确认过")
+    
+    # 获取任务信息
+    task = db.execute(
+        "SELECT * FROM task_definition WHERE _id=?", (ev["task_id"],)
+    ).fetchone()
+    if not task:
+        raise HTTPException(404, "任务定义不存在")
+    
+    # 更新证据状态
+    db.execute(
+        "UPDATE evidence_file SET review_status='approved', reviewed_at=datetime('now') WHERE _id=?",
+        (ev_id,),
+    )
+    
+    # 计算分数
+    score_awarded = task.get("point_value", 10)
+    multiplier = 1.0
+    
+    # 如果是正计时任务，按实际时长加分
+    if task["timing_mode"] == "countup" and ev.get("actual_duration"):
+        actual_minutes = ev["actual_duration"] / 60.0
+        expected_minutes = task.get("expected_duration_min", 30)
+        multiplier = actual_minutes / expected_minutes
+        score_awarded = int(score_awarded * multiplier)
+    
+    # 如果是倒计时任务且未超时，按剩余时间加分
+    elif task["timing_mode"] == "countdown" and ev.get("time_remaining"):
+        remaining = ev["time_remaining"]
+        expected_minutes = task.get("expected_duration_min", 30)
+        multiplier = remaining / (expected_minutes * 60.0)
+        score_awarded = int(score_awarded * multiplier)
+    
+    # 如果是拍照打卡（无计时），直接加基础分
+    elif task["timing_mode"] == "manual":
+        score_awarded = task.get("point_value", 10)
+    
+    # 更新游戏得分
+    db.execute(
+        """INSERT INTO game_session (family_id, task_id, duration_sec, score_delta, metadata)
+           VALUES (?, ?, ?, ?, ?)""",
+        (
+            fam["id"],
+            ev["task_id"],
+            ev.get("actual_duration", 0),
+            score_awarded,
+            json.dumps({
+                "evidence_id": ev_id,
+                "review_status": "approved",
+                "multiplier": multiplier,
+            }),
+        ),
+    )
+    
+    # 如果有总分表，也更新
+    total_row = db.execute(
+        "SELECT * FROM total_score WHERE family_id=?", (fam["id"],)
+    ).fetchone()
+    if total_row:
+        current_total = total_row["total_score"] or 0
+        db.execute(
+            "UPDATE total_score SET total_score=?, updated_at=datetime('now') WHERE family_id=?",
+            (current_total + score_awarded, fam["id"]),
+        )
+    
+    return {
+        "ok": True,
+        "evidence_id": ev_id,
+        "score_awarded": score_awarded,
+        "multiplier": multiplier,
+    }
+
+
 @router.delete("/api/evidence/{ev_id}")
 def delete_evidence(
     ev_id: int,

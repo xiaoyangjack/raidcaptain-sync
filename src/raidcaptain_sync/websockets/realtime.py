@@ -5,6 +5,8 @@ WebSocket 实时通道 - RAID Captain Sync
 import json
 import time
 
+from contextlib import contextmanager
+
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from raidcaptain_sync.deps import (
@@ -31,14 +33,23 @@ def _seen_text(ts: int) -> str:
     return f"{diff // 86400} 天前"
 
 
+def _db():
+    """从生成器获取 SQLite 连接，由调用方负责最终关闭。"""
+    gen = get_db()
+    return next(gen), gen
+
+
 @router.websocket("/ws/device")
 async def ws_device(ws: WebSocket, token: str = ""):
     """设备端 WebSocket：心跳 + 实时状态通知。"""
-    with get_db() as conn:
+    conn, gen = _db()
+    try:
         row = conn.execute(
             "SELECT * FROM device WHERE token_hash=?",
             (sha256_hex(token),),
         ).fetchone()
+    finally:
+        gen.close()
     if not row:
         await ws.close(code=4401)
         return
@@ -47,11 +58,14 @@ async def ws_device(ws: WebSocket, token: str = ""):
     device_sockets.setdefault(fid, []).append(ws)
 
     # 更新 last_seen
-    with get_db() as conn2:
+    conn2, gen2 = _db()
+    try:
         conn2.execute(
             "UPDATE device SET last_seen=? WHERE token_hash=?",
             (int(time.time()), sha256_hex(token)),
         )
+    finally:
+        gen2.close()
 
     # 上线通知家长
     await ws_push(fid, parent_sockets, {
@@ -66,11 +80,14 @@ async def ws_device(ws: WebSocket, token: str = ""):
         while True:
             msg = await ws.receive_json()
             if msg.get("type") == "ping":
-                with get_db() as conn3:
+                conn3, gen3 = _db()
+                try:
                     conn3.execute(
                         "UPDATE device SET last_seen=? WHERE token_hash=?",
                         (int(time.time()), sha256_hex(token)),
                     )
+                finally:
+                    gen3.close()
                 await ws.send_json({"type": "pong"})
     except WebSocketDisconnect:
         pass
@@ -94,11 +111,14 @@ async def ws_device(ws: WebSocket, token: str = ""):
 @router.websocket("/ws/parent")
 async def ws_parent(ws: WebSocket, token: str = ""):
     """家长端 WebSocket：实时战况推送。"""
-    with get_db() as conn:
+    conn, gen = _db()
+    try:
         row = conn.execute(
             "SELECT id FROM family WHERE parent_token=? AND parent_token_exp>?",
             (sha256_hex(token), int(time.time())),
         ).fetchone()
+    finally:
+        gen.close()
     if not row:
         await ws.close(code=4401)
         return
@@ -107,13 +127,13 @@ async def ws_parent(ws: WebSocket, token: str = ""):
     parent_sockets.setdefault(fid, []).append(ws)
 
     # 连接即发送最近 30 条事件（防止刷新/重连丢事件）
+    conn2, gen2 = _db()
     try:
-        with get_db() as conn2:
-            rows = conn2.execute(
-                "SELECT kind, payload, device_name, created_at FROM event "
-                "WHERE family_id=? ORDER BY _id DESC LIMIT 30",
-                (fid,),
-            ).fetchall()
+        rows = conn2.execute(
+            "SELECT kind, payload, device_name, created_at FROM event "
+            "WHERE family_id=? ORDER BY _id DESC LIMIT 30",
+            (fid,),
+        ).fetchall()
         backlog = [
             {
                 "kind": r["kind"],
@@ -126,6 +146,8 @@ async def ws_parent(ws: WebSocket, token: str = ""):
         await ws.send_json({"type": "events_backlog", "events": backlog})
     except Exception:
         pass
+    finally:
+        gen2.close()
 
     try:
         while True:

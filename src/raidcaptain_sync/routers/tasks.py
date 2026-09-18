@@ -1,7 +1,8 @@
 """
-任务路由 - RAID Captain Sync v3.4
-支持计时模式 + 场景模板 + 任务下发留痕。
+任务路由 - RAID Captain Sync v3.5
+支持计时模式 + 场景模板 + 任务下发留痕 + 拍照打卡审批。
 """
+import datetime
 import json
 import time
 
@@ -15,6 +16,7 @@ from raidcaptain_sync.deps import (
     ws_push,
 )
 from raidcaptain_sync.services.auth import make_token as _new_task_id
+from raidcaptain_sync.services.economy import CurrencyKind, EconomyService
 
 router = APIRouter()
 
@@ -71,9 +73,9 @@ def _task_snapshot(row: dict) -> dict:
         "points_penalty": row.get("points_penalty", 0),
         "require_evidence": bool(row.get("require_evidence", 0)),
         "active": bool(row.get("active", 1)),
-        "mode_id": row.get("mode_id", "builtin:writing"),
-        "duration_min": row.get("duration_min", 30),
-        "timing_mode": row.get("timing_mode", "countdown"),
+        "mode_id": row.get("mode_id") or "builtin:writing",
+        "duration_min": row.get("duration_min") or 30,
+        "timing_mode": row.get("timing_mode") or "countdown",
     }
 
 
@@ -149,6 +151,80 @@ async def parent_push_tasks(
         "type": "tasks_updated", "revision": rev, "count": len(tasks)
     })
     return {"ok": True, "revision": rev, "task_id": last_task_id}
+
+
+@router.post("/api/parent/tasks/{task_id}/photo-review")
+async def parent_photo_review(
+    task_id: str, body: dict,
+    authorization: str | None = Header(None), db=Depends(get_db)
+):
+    """家长审批拍照打卡：approve → DONE + 加分；reject → OVERDUE。"""
+    fam = auth_parent(db, authorization)
+    fid = fam["id"]
+    verdict = str(body.get("verdict", "")).strip()
+    if verdict not in ("approve", "reject"):
+        raise HTTPException(400, "verdict 必须为 approve 或 reject")
+
+    row = db.execute(
+        "SELECT * FROM task WHERE family_id=? AND task_id=?", (fid, task_id)
+    ).fetchone()
+    if not row:
+        raise HTTPException(404, "任务不存在")
+
+    # 查今日完成状态
+    today = datetime.date.today().isoformat()
+    state_row = db.execute(
+        "SELECT state FROM task_completions WHERE task_id=? AND date=?",
+        (task_id, today)
+    ).fetchone()
+    current_state = state_row["state"] if state_row else "PENDING"
+
+    if verdict == "approve":
+        if current_state == "DONE":
+            raise HTTPException(400, "该任务今日已完成")
+        # 记录 DONE，发放奖励
+        now = int(time.time() * 1000)
+        db.execute(
+            "INSERT OR REPLACE INTO task_completions(task_id, date, state, timing_mode, actual_minutes, settled_at, synced) "
+            "VALUES(?,?,?,?,?,?,0)",
+            (task_id, today, "DONE", row["timing_mode"] or "photo", 0, now)
+        )
+        if row["points_reward"] > 0 or row["merit_reward"] > 0:
+            eco = EconomyService(db)
+            if row["merit_reward"] > 0:
+                eco.transfer(fid, CurrencyKind.MERIT, row["merit_reward"],
+                             f"拍照打卡「{row['title']}」家长确认", task_id)
+            if row["points_reward"] > 0:
+                eco.transfer(fid, CurrencyKind.POINTS, row["points_reward"],
+                             f"拍照打卡「{row['title']}」家长确认", task_id)
+        _write_audit(db, fid, task_id, "photo_approve", "parent",
+                     {"state": current_state}, {"state": "DONE"})
+    else:
+        if current_state == "OVERDUE":
+            raise HTTPException(400, "该任务今日已逾期")
+        # 记录 OVERDUE，逾期扣分
+        now = int(time.time() * 1000)
+        db.execute(
+            "INSERT OR REPLACE INTO task_completions(task_id, date, state, timing_mode, actual_minutes, settled_at, synced) "
+            "VALUES(?,?,?,?,?,?,0)",
+            (task_id, today, "OVERDUE", row["timing_mode"] or "photo", 0, now)
+        )
+        has_penalty = row["mandatory"] and (row["merit_penalty"] > 0 or row["points_penalty"] > 0)
+        if has_penalty:
+            eco = EconomyService(db)
+            if row["merit_penalty"] > 0:
+                eco.transfer(fid, CurrencyKind.MERIT, -row["merit_penalty"],
+                             f"拍照打卡驳回「{row['title']}」", task_id)
+            if row["points_penalty"] > 0:
+                eco.transfer(fid, CurrencyKind.POINTS, -row["points_penalty"],
+                             f"拍照打卡驳回「{row['title']}」", task_id)
+        _write_audit(db, fid, task_id, "photo_reject", "parent",
+                     {"state": current_state}, {"state": "OVERDUE"})
+
+    # 推送状态变更
+    ws_push(fid, device_sockets, {"type": "task_state_updated", "task_id": task_id, "state": "DONE" if verdict == "approve" else "OVERDUE"})
+    rev = bump_revision(db, fid)
+    return {"ok": True, "revision": rev, "state": "DONE" if verdict == "approve" else "OVERDUE"}
 
 
 @router.post("/api/tasks")
