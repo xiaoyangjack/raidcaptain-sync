@@ -1510,11 +1510,12 @@ async function doDispatch(taskList){
       }, 150);
     }
   } catch(e) {
-    // 失败：弹窗保留 + 错误条
+    // 失败：弹窗保留 + 错误条（不再阻塞 UI）
     const r = detectError(e);
     formError(r.msg, r.retry);
     lastFailedTask = taskList[taskList.length-1];
     setModalLoading(false);
+    closeTaskModal();
   } finally {
     isDispatching = false;
   }
