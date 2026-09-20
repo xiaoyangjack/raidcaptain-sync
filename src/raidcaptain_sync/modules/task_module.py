@@ -105,6 +105,21 @@ class TaskModule(BaseModule):
         self._routers: list = []
         self._build_routers()
 
+    async def _notify_tasks_changed(self, family_id: str, revision: int, count: int | None = None) -> None:
+        """Notify every supported device client that it must pull the task snapshot.
+
+        ``tasks_changed`` is the canonical message understood by the Android
+        client.  ``tasks_updated`` is retained for older web/device clients.
+        Sending both makes every task mutation follow the same wire contract.
+        """
+        message = {"type": "tasks_changed", "revision": revision}
+        if count is not None:
+            message["count"] = count
+        await self._ws_push(family_id, self._device_sockets, message)
+        legacy_message = dict(message)
+        legacy_message["type"] = "tasks_updated"
+        await self._ws_push(family_id, self._device_sockets, legacy_message)
+
     def _build_routers(self) -> None:
         r = APIRouter(prefix="/api", tags=["tasks"])
 
@@ -164,7 +179,7 @@ class TaskModule(BaseModule):
                 )
                 # v3.4: 写入 audit
                 _write_audit(db, fid, tid, "created" if tid not in old_rows else "updated",
-                             body.get("_actor", "parent"), old_rows.get(tid), dict(row=t))
+                             body.get("_actor", "parent"), old_rows.get(tid), _task_snapshot(t))
                 last_id = tid
             # 被整单替换掉的任务 → disabled
             for row in db.execute(
@@ -180,10 +195,7 @@ class TaskModule(BaseModule):
                     _write_audit(db, fid, tid_old, "disabled",
                                  body.get("_actor", "parent"), _task_snapshot(old_row), {})
             rev = self._bump_revision(db, fid)
-            await self._ws_push(
-                fid, self._device_sockets,
-                {"type": "tasks_updated", "revision": rev, "count": len(tasks)}
-            )
+            await self._notify_tasks_changed(fid, rev, len(tasks))
             return {"ok": True, "revision": rev, "task_id": last_id}
 
         @r.post("/tasks")
@@ -260,7 +272,7 @@ class TaskModule(BaseModule):
             for row in db.execute(
                 "SELECT task_id, active FROM task WHERE family_id=?", (fid,)
             ).fetchall():
-                if row["task_id"] not in keep and row.get("active"):
+                if row["task_id"] not in keep and row["active"]:
                     db.execute(
                         "UPDATE task SET active=0, updated_at=? "
                         "WHERE family_id=? AND task_id=?",
@@ -272,7 +284,7 @@ class TaskModule(BaseModule):
                                  _task_snapshot(old_snap) if old_snap else {},
                                  {})
             rev = self._bump_revision(db, fid)
-            await self._ws_push(fid, self._device_sockets, {"type": "tasks_changed"})
+            await self._notify_tasks_changed(fid, rev, len(tasks))
             return {"ok": True, "revision": rev}
 
         @r.get("/tasks")
@@ -392,8 +404,7 @@ class TaskModule(BaseModule):
                              authorization or "parent",
                              _task_snapshot(dict(old)), {})
                 rev = self._bump_revision(db, fid)
-                await self._ws_push(fid, self._device_sockets,
-                                    {"type": "tasks_updated", "revision": rev})
+                await self._notify_tasks_changed(fid, rev)
                 return {"ok": True, "task_id": tid, "revision": rev}
             raise HTTPException(404, f"任务 {tid} 不存在")
 
